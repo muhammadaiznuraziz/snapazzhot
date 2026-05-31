@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-red: #EA2D2D;
+  --color-deep-red: #C61D1D;
+  --color-soft-red: #FF6B6B;
+  --color-accent-pink: #FF9A9A;
+  --color-surface-dark: #111111;
+  --color-surface-light: #F7F7F7;
+  
+  --font-sans: var(--font-sans), sans-serif;
+  --font-pixel: var(--font-pixel), monospace;
+  --font-display: var(--font-display), sans-serif;
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  
+  .glass-panel-heavy {
+    background: rgba(17, 17, 17, 0.85);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .hover-glow {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .hover-glow:hover {
+    box-shadow: 0 0 40px rgba(255, 90, 90, 0.4);
+    border-color: #FF6B6B;
+  }
+  
+  .red-glow {
+    box-shadow: 0 0 20px rgba(234, 45, 45, 0.3);
+  }
+
+  /* Retro arcade scanner lines background helper */
+  .pixel-scanlines {
+    background: linear-gradient(
+      rgba(18, 16, 16, 0) 50%, 
+      rgba(0, 0, 0, 0.25) 50%
+    ), linear-gradient(
+      90deg, 
+      rgba(255, 0, 0, 0.06), 
+      rgba(0, 255, 0, 0.02), 
+      rgba(0, 0, 255, 0.06)
+    );
+    background-size: 100% 4px, 6px 100%;
+  }
+
+  /* Custom sticker black outline/shadow effect for Purikura headings */
+  .text-sticker {
+    color: #ffffff;
+    text-shadow: 
+      -3px -3px 0 #000,  
+       3px -3px 0 #000,
+      -3px  3px 0 #000,
+       3px  3px 0 #000,
+       0px  3px 0 #000,
+       0px -3px 0 #000,
+       3px  0px 0 #000,
+      -3px  0px 0 #000,
+       4px  4px 0px #EA2D2D;
+  }
+  
+  .text-sticker-pink {
+    color: #ffffff;
+    text-shadow: 
+      -2px -2px 0 #000,  
+       2px -2px 0 #000,
+      -2px  2px 0 #000,
+       2px  2px 0 #000,
+       3px  3px 0px #FF9A9A;
+  }
+}

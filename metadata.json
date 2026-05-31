@@ -1,0 +1,10 @@
+{
+  "name": "snapazzhot",
+  "description": "Premium Japanese photobooth meets retro arcade. Create and customize photo strips with custom filters.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
