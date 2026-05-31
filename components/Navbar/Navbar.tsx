@@ -6,14 +6,23 @@ import { User } from "../../types/photobooth";
 interface NavbarProps {
   page: number;
   setPage: (page: number) => void;
+  user: User | null;
+  muted: boolean;
+  setMuted: (muted: boolean) => void;
+  playSound: (type: "click" | "shutter" | "countdown" | "complete") => void;
+  setActiveModal: React.Dispatch<
+    React.SetStateAction<"about" | "privacy" | null>
+  >;
 }
 
 export function Navbar({
   page,
   setPage,
+  user,
   muted,
   setMuted,
   playSound,
+  setActiveModal,
 }: NavbarProps) {
   const handleBackNavigation = () => {
     if (page <= 1) return;
