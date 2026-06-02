@@ -1,80 +1,166 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-red: #EA2D2D;
-  --color-deep-red: #C61D1D;
-  --color-soft-red: #FF6B6B;
-  --color-accent-pink: #FF9A9A;
+  --color-primary-red: #ea2d2d;
+  --color-deep-red: #c61d1d;
+  --color-soft-red: #ff6b6b;
+  --color-accent-pink: #ff9a9a;
   --color-surface-dark: #111111;
-  --color-surface-light: #F7F7F7;
-  
+  --color-surface-light: #f7f7f7;
+
   --font-sans: var(--font-sans), sans-serif;
   --font-pixel: var(--font-pixel), monospace;
   --font-display: var(--font-display), sans-serif;
 }
 
-@layer utilities {
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-  }
-  
-  .glass-panel-heavy {
-    background: rgba(17, 17, 17, 0.85);
-    backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
+/* ========================================
+   Base Typography
+======================================== */
 
-  .hover-glow {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  .hover-glow:hover {
-    box-shadow: 0 0 40px rgba(255, 90, 90, 0.4);
-    border-color: #FF6B6B;
-  }
-  
-  .red-glow {
-    box-shadow: 0 0 20px rgba(234, 45, 45, 0.3);
-  }
+html,
+body {
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 
-  /* Retro arcade scanner lines background helper */
-  .pixel-scanlines {
-    background: linear-gradient(
-      rgba(18, 16, 16, 0) 50%, 
-      rgba(0, 0, 0, 0.25) 50%
-    ), linear-gradient(
-      90deg, 
-      rgba(255, 0, 0, 0.06), 
-      rgba(0, 255, 0, 0.02), 
+  background-color: #050505;
+  color: #ffffff;
+
+  font-family: var(--font-pixel), monospace;
+  font-size: clamp(0.6875rem, 0.6rem + 0.35vw, 0.875rem);
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: clamp(1.5rem, 4vw + 0.5rem, 2.5rem);
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: clamp(1.2rem, 3vw + 0.4rem, 1.85rem);
+  line-height: 1.25;
+}
+
+h3 {
+  font-size: clamp(1rem, 2vw + 0.3rem, 1.35rem);
+  line-height: 1.3;
+}
+
+p {
+  font-size: clamp(0.75rem, 0.7rem + 0.2vw, 0.95rem);
+}
+
+/* ========================================
+   Glass Effects
+======================================== */
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.glass-panel-heavy {
+  background: rgba(17, 17, 17, 0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ========================================
+   Hover Effects
+======================================== */
+
+.hover-glow {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 40px rgba(255, 90, 90, 0.4);
+  border-color: #ff6b6b;
+}
+
+.red-glow {
+  box-shadow: 0 0 20px rgba(234, 45, 45, 0.3);
+}
+
+/* ========================================
+   Retro CRT Scanlines
+======================================== */
+
+.pixel-scanlines {
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(
+      90deg,
+      rgba(255, 0, 0, 0.06),
+      rgba(0, 255, 0, 0.02),
       rgba(0, 0, 255, 0.06)
     );
-    background-size: 100% 4px, 6px 100%;
+
+  background-size:
+    100% 4px,
+    6px 100%;
+}
+
+/* ========================================
+   Sticker Text Effects
+======================================== */
+
+.text-sticker {
+  color: #ffffff;
+
+  text-shadow:
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000,
+    0 2px 0 #000,
+    0 -2px 0 #000,
+    2px 0 0 #000,
+    -2px 0 0 #000,
+    3px 3px 0 #ea2d2d;
+}
+
+.text-sticker-pink {
+  color: #ffffff;
+
+  text-shadow:
+    -1.5px -1.5px 0 #000,
+    1.5px -1.5px 0 #000,
+    -1.5px 1.5px 0 #000,
+    1.5px 1.5px 0 #000,
+    2px 2px 0 #ff9a9a;
+}
+
+/* ========================================
+   Desktop Enhancements
+======================================== */
+
+@media (min-width: 768px) {
+  .text-sticker {
+    text-shadow:
+      -3px -3px 0 #000,
+      3px -3px 0 #000,
+      -3px 3px 0 #000,
+      3px 3px 0 #000,
+      0 3px 0 #000,
+      0 -3px 0 #000,
+      3px 0 0 #000,
+      -3px 0 0 #000,
+      4px 4px 0 #ea2d2d;
   }
 
-  /* Custom sticker black outline/shadow effect for Purikura headings */
-  .text-sticker {
-    color: #ffffff;
-    text-shadow: 
-      -3px -3px 0 #000,  
-       3px -3px 0 #000,
-      -3px  3px 0 #000,
-       3px  3px 0 #000,
-       0px  3px 0 #000,
-       0px -3px 0 #000,
-       3px  0px 0 #000,
-      -3px  0px 0 #000,
-       4px  4px 0px #EA2D2D;
-  }
-  
   .text-sticker-pink {
-    color: #ffffff;
-    text-shadow: 
-      -2px -2px 0 #000,  
-       2px -2px 0 #000,
-      -2px  2px 0 #000,
-       2px  2px 0 #000,
-       3px  3px 0px #FF9A9A;
+    text-shadow:
+      -2px -2px 0 #000,
+      2px -2px 0 #000,
+      -2px 2px 0 #000,
+      2px 2px 0 #000,
+      3px 3px 0 #ff9a9a;
   }
 }

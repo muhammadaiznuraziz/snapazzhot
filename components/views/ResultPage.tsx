@@ -1,11 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { 
-  Award, Download, Instagram, Mail, RefreshCw, Share2, 
-  Twitter, Volume2, Video, Archive,
-  CheckCircle2, BellRing, Loader2, PackageCheck
-} from 'lucide-react';
-import { FrameTemplate, GeminiResult } from '../../types/photobooth';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import {
+  Award,
+  Download,
+  Instagram,
+  Mail,
+  RefreshCw,
+  Share2,
+  Twitter,
+  Volume2,
+  Video,
+  Archive,
+  CheckCircle2,
+  BellRing,
+  Loader2,
+  PackageCheck,
+  AlertTriangle,
+  Sparkles,
+} from "lucide-react";
+import { CustomFrame, FrameTemplate, GeminiResult } from "../../types/photobooth";
 
 interface ResultPageProps {
   resultTab: "PHOTO STRIP" | "GIF" | "VIDEO";
@@ -16,7 +29,7 @@ interface ResultPageProps {
   filterIntensity: number;
   getFilterStyle: (f: string, i: number) => string;
   sessionID: string;
-  selectedFrame: FrameTemplate;
+  selectedFrame: FrameTemplate | CustomFrame;
   geminiResult: GeminiResult;
   handleDownloadDisk: () => void;
   handleEmailSubmit: (e: React.FormEvent) => void;
@@ -25,9 +38,46 @@ interface ResultPageProps {
   isEmailSending: boolean;
   emailSuccessMessage: string;
   resetEntireSession: () => void;
-  playSound: (type: 'click' | 'shutter' | 'countdown' | 'complete') => void;
+  playSound: (type: "click" | "shutter" | "countdown" | "complete") => void;
   setPage: (page: number) => void;
+  sessionVideoBlob?: Blob | null;
 }
+
+// Interface untuk melacak status rendering masing-masing aset di latar belakang
+interface AssetPreparation {
+  strip: "idle" | "preparing" | "ready" | "error";
+  gif: "idle" | "preparing" | "ready" | "error";
+  video: "idle" | "preparing" | "ready" | "error";
+}
+
+// Fungsi pembantu untuk mengubah berkas foto ke resolusi ringan demi mempercepat kompresi GIF secara dramatis
+const resizePhotoForGif = (
+  dataUrl: string,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        // Menggunakan interpolasi interpolasi tingkat rendah agar pemrosesan resizing secepat kilat
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "low";
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        resolve(canvas.toDataURL("image/jpeg", 0.6)); // Output JPEG terkompresi super ringan (0.6)
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
 
 export function ResultPage({
   resultTab,
@@ -48,216 +98,568 @@ export function ResultPage({
   emailSuccessMessage,
   resetEntireSession,
   playSound,
-  setPage
+  setPage,
+  sessionVideoBlob = null,
 }: ResultPageProps) {
-  
-  const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const [toastNotification, setToastNotification] = useState<string | null>(
+    null,
+  );
   const [isPlayingReel, setIsPlayingReel] = useState(false);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
+
+  // State manajemen unduhan asinkron cepat & status aset
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
-  const [zipProgress, setZipProgress] = useState<string>('');
+  const [zipProgress, setZipProgress] = useState<string>("");
+  const [sessionVideoUrl, setSessionVideoUrl] = useState<string | null>(null);
+
+  // Cache Blobs yang sudah jadi di latar belakang untuk menghindari render ulang saat diunduh
+  const [cachedStripBlob, setCachedStripBlob] = useState<Blob | null>(null);
+  const [cachedGifBlob, setCachedGifBlob] = useState<Blob | null>(null);
+  const [cachedVideoBlob, setCachedVideoBlob] = useState<Blob | null>(null);
+  const [videoFileExt, setVideoFileExt] = useState<string>("webm");
+  const selectedFrameHeader =
+    "imageData" in selectedFrame
+      ? selectedFrame.name
+      : selectedFrame.headerTheme || "Tokyo Purikura Arcade";
+
+  // Melacak status persiapan aset secara individual
+  const [prepStatus, setPrepStatus] = useState<AssetPreparation>({
+    strip: "idle",
+    gif: "idle",
+    video: "idle",
+  });
+
+  // Menyimpan semua Object URL yang dibuat untuk di-revoke saat unmount guna mencegah memory leak
+  const activeObjectUrlsRef = useRef<string[]>([]);
+
+  const registerObjectUrl = (url: string): string => {
+    activeObjectUrlsRef.current.push(url);
+    return url;
+  };
 
   const triggerToast = (message: string) => {
     setToastNotification(message);
   };
 
+  // Bersihkan semua URL objek yang aktif saat halaman ditutup/direset
   useEffect(() => {
-    if (toastNotification) {
-      const timer = setTimeout(() => setToastNotification(null), 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toastNotification]);
+    return () => {
+      activeObjectUrlsRef.current.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.warn("Gagal membersihkan URL Objek:", e);
+        }
+      });
+      activeObjectUrlsRef.current = [];
+    };
+  }, []);
 
+  // Sinkronisasi pemutar video langsung dari sesi foto
+  useEffect(() => {
+    if (sessionVideoBlob) {
+      const url = URL.createObjectURL(sessionVideoBlob);
+      registerObjectUrl(url);
+      setSessionVideoUrl(url);
+      setCachedVideoBlob(sessionVideoBlob);
+      setVideoFileExt(sessionVideoBlob.type.includes("mp4") ? "mp4" : "webm");
+      setPrepStatus((prev) => ({ ...prev, video: "ready" }));
+    } else {
+      setSessionVideoUrl(null);
+    }
+  }, [sessionVideoBlob]);
+
+  // Mengatur interval tayang slideshow reel preview di layar
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isPlayingReel && capturedPhotos.length > 0) {
+      const calculatedPreviewInterval = (10 * 1000) / capturedPhotos.length;
       interval = setInterval(() => {
-        setActiveReelIndex(prev => (prev + 1) % capturedPhotos.length);
-      }, 500);
+        setActiveReelIndex((prev) => (prev + 1) % capturedPhotos.length);
+      }, calculatedPreviewInterval);
     }
     return () => clearInterval(interval);
   }, [isPlayingReel, capturedPhotos]);
 
-  // ─── Generate WebM video reel from captured photos via Canvas + MediaRecorder ───
-  const generateWebMReel = (): Promise<Blob | null> => {
+  // PEMROSESAN PARALEL DI LATAR BELAKANG (BACKGROUND PROCESSING ON MOUNT)
+  useEffect(() => {
+    let isMounted = true;
+
+    const startBackgroundCompilation = async () => {
+      if (!capturedPhotos.length) return;
+
+      // 1. Proses & Cache Photo Strip (PNG)
+      if (finalCompositedImage) {
+        setPrepStatus((prev) => ({ ...prev, strip: "preparing" }));
+        try {
+          const res = await fetch(finalCompositedImage);
+          const blob = await res.blob();
+          if (isMounted) {
+            setCachedStripBlob(blob);
+            setPrepStatus((prev) => ({ ...prev, strip: "ready" }));
+          }
+        } catch (err) {
+          console.error("Gagal memproses Photo Strip di latar belakang:", err);
+          if (isMounted) {
+            setPrepStatus((prev) => ({ ...prev, strip: "error" }));
+          }
+        }
+      }
+
+      // 2. Proses & Cache GIF Animasi 10 Detik (Sangat dioptimasi kecepatannya)
+      setPrepStatus((prev) => ({ ...prev, gif: "preparing" }));
+      try {
+        const gifBlob = await generateGIFWithDuration(capturedPhotos, 10);
+        if (isMounted) {
+          if (gifBlob) {
+            setCachedGifBlob(gifBlob);
+            setPrepStatus((prev) => ({ ...prev, gif: "ready" }));
+          } else {
+            setPrepStatus((prev) => ({ ...prev, gif: "error" }));
+          }
+        }
+      } catch (err) {
+        console.error("Gagal memproses animasi GIF di latar belakang:", err);
+        if (isMounted) {
+          setPrepStatus((prev) => ({ ...prev, gif: "error" }));
+        }
+      }
+
+      // 3. Proses & Cache Slideshow Video Reel (Hanya jika rekaman video sesi langsung tidak ada)
+      if (!sessionVideoBlob) {
+        setPrepStatus((prev) => ({ ...prev, video: "preparing" }));
+        try {
+          const videoResult = await compileWebMReelInBackground();
+          if (isMounted) {
+            if (videoResult) {
+              setCachedVideoBlob(videoResult.blob);
+              setVideoFileExt(videoResult.ext);
+              setPrepStatus((prev) => ({ ...prev, video: "ready" }));
+            } else {
+              setPrepStatus((prev) => ({ ...prev, video: "error" }));
+            }
+          }
+        } catch (err) {
+          console.error(
+            "Gagal memproses video slideshow di latar belakang:",
+            err,
+          );
+          if (isMounted) {
+            setPrepStatus((prev) => ({ ...prev, video: "error" }));
+          }
+        }
+      }
+    };
+
+    startBackgroundCompilation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [capturedPhotos, finalCompositedImage, sessionVideoBlob]);
+
+  // Ambil pustaka Gifshot secara aman dari CDN Multi-Channel Failover
+  const getGifshot = (): Promise<any> => {
+    const urls = [
+      "https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.4.5/gifshot.min.js",
+      "https://unpkg.com/gifshot@0.4.5/dist/gifshot.min.js",
+    ];
+
+    return new Promise(async (resolve, reject) => {
+      if (typeof window === "undefined") {
+        resolve(null);
+        return;
+      }
+      if ((window as any).gifshot) {
+        resolve((window as any).gifshot);
+        return;
+      }
+
+      const tryFetchEval = async (url: string): Promise<boolean> => {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const text = await res.text();
+            const fn = new Function(text);
+            fn();
+            if ((window as any).gifshot) return true;
+          }
+        } catch (e) {
+          console.warn("Fetch eval gagal untuk " + url, e);
+        }
+        return false;
+      };
+
+      for (const url of urls) {
+        const fetchSuccess = await tryFetchEval(url);
+        if (fetchSuccess) {
+          resolve((window as any).gifshot);
+          return;
+        }
+
+        const scriptSuccess = await new Promise<boolean>((scriptResolve) => {
+          const script = document.createElement("script");
+          script.src = url;
+          script.async = true;
+          script.crossOrigin = "anonymous";
+          script.onload = () => {
+            scriptResolve(typeof (window as any).gifshot !== "undefined");
+          };
+          script.onerror = () => {
+            scriptResolve(false);
+          };
+          document.head.appendChild(script);
+        });
+
+        if (scriptSuccess) {
+          resolve((window as any).gifshot);
+          return;
+        }
+      }
+
+      reject(
+        new Error(
+          "Pustaka gifshot gagal dimuat dari seluruh jaringan CDN CDN.",
+        ),
+      );
+    });
+  };
+
+  const generateGIFWithDuration = (
+    photos: string[],
+    durationSeconds: number,
+  ): Promise<Blob | null> => {
+    return new Promise(async (resolve) => {
+      if (!photos.length) {
+        resolve(null);
+        return;
+      }
+      try {
+        const gifshot = await getGifshot();
+        if (!gifshot) {
+          resolve(null);
+          return;
+        }
+
+        // PRA-KOMPRESI PARALEL: Konversi gambar ke format web-optimized JPEG secara instan (resolusi optimal 320x240)
+        const optimizedFrames = await Promise.all(
+          photos.map((photo) => resizePhotoForGif(photo, 320, 240)),
+        );
+
+        const frameInterval = durationSeconds / optimizedFrames.length;
+
+        // Pembuatan animasi GIF super cepat menggunakan dimensi 320x240 dan sampleInterval: 25
+        gifshot.createGIF(
+          {
+            images: optimizedFrames,
+            interval: frameInterval,
+            gifWidth: 320, // Dimensi optimal mempercepat rendering hingga 36%
+            gifHeight: 240,
+            numWorkers: 0,
+            sampleInterval: 25, // CRITICAL: NeuQuant melewati tiap 25 piksel, mempercepat konversi 2.5x lipat
+          },
+          (obj: any) => {
+            if (!obj.error) {
+              const base64Data = obj.image.split(",")[1];
+              const byteCharacters = atob(base64Data);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              const blob = new Blob([byteArray], { type: "image/gif" });
+              resolve(blob);
+            } else {
+              console.error("Kesalahan kompresi gifshot:", obj.error);
+              resolve(null);
+            }
+          },
+        );
+      } catch (err) {
+        console.error("Kesalahan eksekusi pembuatan animasi GIF:", err);
+        resolve(null);
+      }
+    });
+  };
+
+  // Kompilasi WebM Reel di latar belakang tanpa mengganggu jalannya aplikasi utama
+  const compileWebMReelInBackground = (): Promise<{
+    blob: Blob;
+    ext: string;
+  } | null> => {
     return new Promise((resolve) => {
-      if (!capturedPhotos.length) { resolve(null); return; }
+      if (!capturedPhotos.length) {
+        resolve(null);
+        return;
+      }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(null); return; }
+      const canvas = document.createElement("canvas");
+      canvas.width = 960;
+      canvas.height = 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
 
-      // Check MediaRecorder support
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-          ? 'video/webm;codecs=vp8'
-          : 'video/webm';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "medium";
 
-      if (!window.MediaRecorder) { resolve(null); return; }
+      let mimeType = "video/webm";
+      let ext = "webm";
 
-      const stream = canvas.captureStream(24);
-      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_500_000 });
+      const candidates = [
+        { mime: "video/webm;codecs=vp9", ext: "webm" },
+        { mime: "video/webm;codecs=vp8", ext: "webm" },
+        { mime: "video/webm", ext: "webm" },
+        { mime: "video/mp4;codecs=h264", ext: "mp4" },
+        { mime: "video/mp4", ext: "mp4" },
+      ];
+
+      for (const candidate of candidates) {
+        if (MediaRecorder.isTypeSupported(candidate.mime)) {
+          mimeType = candidate.mime;
+          ext = candidate.ext;
+          break;
+        }
+      }
+
+      if (!window.MediaRecorder) {
+        resolve(null);
+        return;
+      }
+
+      const stream = canvas.captureStream(25);
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 4_000_000,
+      });
       const chunks: Blob[] = [];
 
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        resolve(blob);
+        const blob = new Blob(chunks, { type: mimeType });
+        resolve({ blob, ext });
       };
 
       recorder.start(100);
 
       const filterStyle = getFilterStyle(selectedFilter, filterIntensity);
       let photoIdx = 0;
-      const FRAME_DURATION_MS = 900; // 0.9s per photo
 
-      // Draw a "title card" first
-      ctx.fillStyle = '#0a0a0a';
+      const totalDurationMs = 10000;
+      const titleCardDuration = 1000;
+      const endCardDuration = 1000;
+      const photosTotalDuration =
+        totalDurationMs - titleCardDuration - endCardDuration;
+      const FRAME_DURATION_MS = photosTotalDuration / capturedPhotos.length;
+
+      // Draw Title Card
+      ctx.fillStyle = "#0a0a0a";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = selectedFrame.borderColor;
-      ctx.font = 'bold 28px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('SNAPAZZHOT', canvas.width / 2, canvas.height / 2 - 20);
-      ctx.fillStyle = '#ffffff88';
-      ctx.font = '14px monospace';
-      ctx.fillText(selectedFrame.headerTheme, canvas.width / 2, canvas.height / 2 + 20);
+      ctx.font = "bold 44px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("SNAPAZZHOT", canvas.width / 2, canvas.height / 2 - 30);
+      ctx.fillStyle = "#ffffff88";
+      ctx.font = "20px monospace";
+      ctx.fillText(
+        selectedFrameHeader,
+        canvas.width / 2,
+        canvas.height / 2 + 30,
+      );
 
-      const showNextPhoto = () => {
+      const drawNextPhoto = () => {
         if (photoIdx >= capturedPhotos.length) {
-          // End card
-          ctx.fillStyle = '#0a0a0a';
+          // Draw Outro Card
+          ctx.fillStyle = "#0a0a0a";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#ffffff44';
-          ctx.font = '12px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(`SESSION: ${sessionID || 'SPZ-2026'}`, canvas.width / 2, canvas.height / 2);
-          setTimeout(() => recorder.stop(), 600);
+          ctx.fillStyle = selectedFrame.borderColor;
+          ctx.font = "bold 34px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(
+            "THANK YOU FOR PLAYING!",
+            canvas.width / 2,
+            canvas.height / 2 - 20,
+          );
+          ctx.fillStyle = "#ffffff44";
+          ctx.font = "18px monospace";
+          ctx.fillText(
+            `SESSION ID: ${sessionID || "SPZ-2026"}`,
+            canvas.width / 2,
+            canvas.height / 2 + 40,
+          );
+
+          setTimeout(() => {
+            recorder.stop();
+          }, endCardDuration);
           return;
         }
 
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        img.crossOrigin = "anonymous";
         img.onload = () => {
           ctx.filter = filterStyle;
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          ctx.filter = 'none';
+          ctx.filter = "none";
 
-          // Overlay: frame number badge
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.fillRect(10, canvas.height - 36, 90, 26);
+          ctx.fillStyle = "rgba(0,0,0,0.65)";
+          ctx.fillRect(20, canvas.height - 60, 160, 42);
           ctx.fillStyle = selectedFrame.borderColor;
-          ctx.font = 'bold 11px monospace';
-          ctx.textAlign = 'left';
-          ctx.fillText(`SHOT ${photoIdx + 1}/${capturedPhotos.length}`, 16, canvas.height - 18);
+          ctx.font = "bold 18px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(
+            `SHOT ${photoIdx + 1}/${capturedPhotos.length}`,
+            100,
+            canvas.height - 32,
+          );
 
           photoIdx++;
-          setTimeout(showNextPhoto, FRAME_DURATION_MS);
+          setTimeout(drawNextPhoto, FRAME_DURATION_MS);
         };
-        img.onerror = () => { photoIdx++; setTimeout(showNextPhoto, FRAME_DURATION_MS); };
+        img.onerror = () => {
+          photoIdx++;
+          setTimeout(drawNextPhoto, FRAME_DURATION_MS);
+        };
         img.src = capturedPhotos[photoIdx];
       };
 
-      // Start after 600ms title card
-      setTimeout(showNextPhoto, 600);
+      setTimeout(drawNextPhoto, titleCardDuration);
     });
   };
 
-  // ─── Main ZIP generation function ───
+  // INSTANT BUNDLING & DOWNLOAD ZIP (Seketika di bawah 1-3 Detik)
   const handleDownloadZip = async () => {
     if (isGeneratingZip) return;
     setIsGeneratingZip(true);
-    playSound('click');
+    playSound("click");
 
     try {
-      // Dynamically import jszip to keep initial bundle small
-      const JSZip = (await import('jszip')).default;
+      const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
       // ── 1. Photo Strip PNG ──
-      setZipProgress('Adding photo strip...');
-      if (finalCompositedImage) {
-        const stripBase64 = finalCompositedImage.split(',')[1];
-        zip.file('photostrip.png', stripBase64, { base64: true });
+      setZipProgress("Mengemas photo strip...");
+      if (cachedStripBlob) {
+        zip.file("photostrip.png", cachedStripBlob);
+      } else if (finalCompositedImage) {
+        // Fallback jika proses latar belakang tertunda
+        const stripBase64 = finalCompositedImage.split(",")[1];
+        zip.file("photostrip.png", stripBase64, { base64: true });
+      } else {
+        throw new Error("Aset Photo Strip utama tidak dapat ditemukan.");
       }
 
-      // ── 2. Individual captured photos ──
-      setZipProgress('Packaging individual photos...');
-      const photosFolder = zip.folder('photos');
+      // ── 2. Individual Photos ──
+      setZipProgress("Mengemas foto satuan...");
+      const photosFolder = zip.folder("photos");
       capturedPhotos.forEach((photo, i) => {
-        const isPng = photo.startsWith('data:image/png');
-        const base64Data = photo.split(',')[1];
-        const ext = isPng ? 'png' : 'jpg';
-        photosFolder?.file(`photo_${String(i + 1).padStart(2, '0')}.${ext}`, base64Data, { base64: true });
+        const isPng = photo.startsWith("data:image/png");
+        const base64Data = photo.split(",")[1];
+        const ext = isPng ? "png" : "jpg";
+        photosFolder?.file(`photo-${i + 1}.${ext}`, base64Data, {
+          base64: true,
+        });
       });
 
-      // ── 3. Animated WebM video reel ──
-      setZipProgress('Rendering video reel (takes a few seconds)...');
-      triggerToast('Recording your reel video...');
-      const videoBlob = await generateWebMReel();
-      if (videoBlob) {
-        const videoBuffer = await videoBlob.arrayBuffer();
-        zip.file('reel.webm', videoBuffer);
+      // ── 3. HD Animated GIF (10 Detik) ──
+      if (cachedGifBlob) {
+        setZipProgress("Mengemas animasi GIF...");
+        const gifFolder = zip.folder("gif");
+        gifFolder?.file("animation.gif", cachedGifBlob);
       }
 
-      // ── 4. README.txt ──
+      // ── 4. High-Definition Video Reel / Recording ──
+      if (cachedVideoBlob) {
+        setZipProgress("Mengemas berkas video...");
+        const videoFolder = zip.folder("video");
+        videoFolder?.file(`session.${videoFileExt}`, cachedVideoBlob);
+      }
+
+      // ── 5. README.txt ──
       const readmeTxt = [
-        `SNAPAZZHOT PURIKURA PACKAGE`,
-        `Session: ${sessionID || 'SPZ-2026'}`,
+        `SNAPAZZHOT PURIKURA ARCADE PACKAGE`,
+        `Session: ${sessionID || "SPZ-2026"}`,
         `Frame Design: ${selectedFrame.name}`,
         `Filter Applied: ${selectedFilter}`,
         `Photos Captured: ${capturedPhotos.length}`,
         ``,
-        `FILES INCLUDED:`,
-        `  photostrip.png  — Full composited photo strip (print-ready)`,
-        `  reel.webm       — Animated video reel of all your shots`,
-        `  photos/         — Individual captured photos`,
+        `STRUKTUR BERKAS DI DALAM ZIP:`,
+        `  photostrip.png     — File cetak utuh strip foto (Purikura Layout)`,
+        `  photos/            — Folder berisi semua foto satuan hasil jepretan`,
+        cachedGifBlob
+          ? `  gif/animation.gif  — Animasi GIF berdurasi pas 10 detik penuh`
+          : ``,
+        cachedVideoBlob
+          ? `  video/session.${videoFileExt} — Video rekaman sesi foto beresolusi HD`
+          : ``,
         ``,
-        `Play reel.webm in any modern browser or VLC.`,
+        `Silakan buka video dan GIF di pemutar media atau browser modern Anda.`,
         `© 2026 snapazzhot. Tokyo Purikura meets Arcade.`,
-      ].join('\n');
-      zip.file('README.txt', readmeTxt);
+      ]
+        .filter(Boolean)
+        .join("\n");
+      zip.file("README.txt", readmeTxt);
 
-      // ── 5. Generate & download ──
-      setZipProgress('Compressing ZIP...');
+      // ── 6. Kompresi Cepat Tingkat 5 (Paling Optimal & Efisien untuk Memori Browser) ──
+      setZipProgress("Membuat berkas ZIP...");
       const zipBlob = await zip.generateAsync(
-        { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
-        (meta) => setZipProgress(`Compressing... ${Math.round(meta.percent)}%`)
+        {
+          type: "blob",
+          compression: "DEFLATE",
+          compressionOptions: { level: 5 },
+        },
+        (meta) => setZipProgress(`Mengemas... ${Math.round(meta.percent)}%`),
       );
 
       const url = URL.createObjectURL(zipBlob);
-      const link = document.createElement('a');
-      link.download = `snapazzhot-${sessionID || 'STRIP'}.zip`;
+      registerObjectUrl(url);
+
+      const link = document.createElement("a");
+      link.download = `snapazzhot-${sessionID || "STRIP"}.zip`;
       link.href = url;
       link.click();
-      URL.revokeObjectURL(url);
 
-      playSound('complete');
-      triggerToast('ZIP downloaded! Check your downloads folder 🎉');
-
+      playSound("complete");
+      triggerToast("ZIP Berhasil diunduh! Cek folder download kamu! 🎉");
     } catch (err) {
-      console.error('ZIP generation error:', err);
-      triggerToast('ZIP failed. Try saving individually.');
+      console.error("Gagal menyusun ZIP:", err);
+      triggerToast(
+        "Proses pembuatan ZIP gagal. Silakan unduh gambar secara satuan.",
+      );
     } finally {
       setIsGeneratingZip(false);
-      setZipProgress('');
+      setZipProgress("");
     }
   };
 
+  // Tombol unduhan aktif ketika Photo Strip (Aset Paling Utama) siap diunduh
+  const isDownloadEnabled = prepStatus.strip === "ready";
+
+  // Evaluasi pesan status persiapan aset untuk memberikan UI yang transparan bagi pengguna
+  const getPreparationMessage = (): string => {
+    if (prepStatus.strip === "preparing") return "Preparing Photo Strip...";
+    if (prepStatus.gif === "preparing") return "Preparing GIF...";
+    if (prepStatus.video === "preparing") return "Preparing Session Video...";
+    if (prepStatus.strip === "error")
+      return "Photo Strip compilation failed. Tap to retry.";
+    if (isDownloadEnabled) return "Ready for Download";
+    return "Initializing components...";
+  };
+
   return (
-    <motion.div 
+    <motion.div
       key="page-result"
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      transition={{ type: "spring", stiffness: 300, damping: 25 }}
       className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative select-none"
       id="view-results"
     >
-      
-      {/* Toast Notification */}
       <AnimatePresence>
         {toastNotification && (
           <motion.div
@@ -270,17 +672,19 @@ export function ResultPage({
               <BellRing size={16} className="animate-bounce" />
             </div>
             <div>
-              <span className="font-pixel text-[8px] text-[#FF9A9A] block uppercase tracking-widest">ARCADE NOTIFICATION</span>
-              <span className="text-xs text-white font-mono font-bold">{toastNotification}</span>
+              <span className="font-pixel text-[8px] text-[#FF9A9A] block uppercase tracking-widest">
+                ARCADE NOTIFICATION
+              </span>
+              <span className="text-xs text-white font-mono font-bold">
+                {toastNotification}
+              </span>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* LEFT COLUMN: Preview Tabs */}
       <div className="lg:col-span-6 flex flex-col items-center gap-6">
-        
-        {/* Sliding Tab Switcher */}
         <LayoutGroup id="result-page-tabs">
           <div className="bg-zinc-950 border border-white/10 p-1.5 rounded-xl flex w-full relative z-10 shadow-inner">
             {(["PHOTO STRIP", "GIF", "VIDEO"] as const).map((tab) => {
@@ -289,10 +693,10 @@ export function ResultPage({
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => { 
-                    playSound('click'); 
-                    setResultTab(tab); 
-                    setIsPlayingReel(false); 
+                  onClick={() => {
+                    playSound("click");
+                    setResultTab(tab);
+                    setIsPlayingReel(false);
                   }}
                   className="flex-1 py-3.5 rounded-lg text-center cursor-pointer font-pixel text-[9px] relative tracking-widest uppercase transition-colors"
                 >
@@ -300,10 +704,16 @@ export function ResultPage({
                     <motion.span
                       layoutId="activeResultTab"
                       className="absolute inset-0 bg-[#EA2D2D] rounded-lg shadow-[0_0_15px_rgba(234,45,45,0.4)]"
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 30,
+                      }}
                     />
                   )}
-                  <span className={`relative z-10 transition-colors duration-200 ${isActive ? 'text-white font-black' : 'text-gray-500 hover:text-white'}`}>
+                  <span
+                    className={`relative z-10 transition-colors duration-200 ${isActive ? "text-white font-black" : "text-gray-500 hover:text-white"}`}
+                  >
                     {tab}
                   </span>
                 </button>
@@ -315,35 +725,40 @@ export function ResultPage({
         {/* CRT Monitor Display Box */}
         <div className="bg-[#111111] p-6 rounded-[2rem] border-2 border-white/10 flex justify-center items-center relative w-full overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,6px_100%] pointer-events-none z-20 opacity-30" />
-          
+
           {/* Photo Strip tab */}
           {resultTab === "PHOTO STRIP" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, rotate: -1 }}
               animate={{ opacity: 1, scale: 1, rotate: 0 }}
               className="relative shadow-[0_25px_60px_rgba(0,0,0,0.8)] w-full max-w-[210px] rounded-xl overflow-hidden hover:scale-105 transition-transform duration-500 group cursor-zoom-in"
             >
               {finalCompositedImage ? (
                 <>
-                  <img 
-                    src={finalCompositedImage} 
-                    className="w-full object-contain max-h-[460px]" 
-                    alt="snapazzhot Purikura Final strip" 
+                  <img
+                    src={finalCompositedImage}
+                    className="w-full object-contain max-h-[460px]"
+                    alt="snapazzhot Purikura Final strip"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                 </>
               ) : (
                 <div className="h-96 w-full bg-zinc-950 flex flex-col items-center justify-center gap-3">
-                  <RefreshCw className="text-[#EA2D2D] animate-spin" size={24} />
-                  <span className="text-gray-400 font-pixel text-[8px] animate-pulse">Compiling photo strip...</span>
+                  <RefreshCw
+                    className="text-[#EA2D2D] animate-spin"
+                    size={24}
+                  />
+                  <span className="text-gray-400 font-pixel text-[8px] animate-pulse">
+                    Compiling photo strip...
+                  </span>
                 </div>
               )}
             </motion.div>
           )}
 
-          {/* GIF (looping slideshow) tab */}
+          {/* GIF Tab */}
           {resultTab === "GIF" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="w-64 h-80 bg-zinc-950 border-2 border-white/10 rounded-2xl relative overflow-hidden flex items-center justify-center shadow-2xl"
@@ -352,44 +767,59 @@ export function ResultPage({
                 LOOPED GIF ACTIVE
               </div>
               <div className="w-full h-full">
-                <SimpleGifPlayer 
-                  photos={capturedPhotos} 
-                  filter={selectedFilter} 
-                  intensity={filterIntensity} 
-                  filterFunc={getFilterStyle} 
+                <SimpleGifPlayer
+                  photos={capturedPhotos}
+                  filter={selectedFilter}
+                  intensity={filterIntensity}
+                  filterFunc={getFilterStyle}
                   frame={selectedFrame}
                 />
               </div>
             </motion.div>
           )}
 
-          {/* Video Reel tab */}
+          {/* Video Tab */}
           {resultTab === "VIDEO" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="w-64 h-80 bg-zinc-950 border-2 border-white/10 rounded-2xl overflow-hidden flex flex-col justify-between p-4 relative shadow-2xl"
             >
               <div className="absolute top-3 left-3 font-pixel text-[7px] bg-indigo-500 text-white px-2 py-1 rounded z-10 uppercase tracking-widest shadow-md flex items-center gap-1">
                 <Video size={10} className="animate-pulse" />
-                <span>MP4 REEL MODE</span>
+                <span>
+                  {sessionVideoBlob ? "LIVE SESSION VIDEO" : "MP4 REEL MODE"}
+                </span>
               </div>
-              
-              <div className="flex-1 flex flex-col justify-center items-center gap-3 text-center p-2 relative">
-                {isPlayingReel && capturedPhotos.length > 0 ? (
+
+              <div className="flex-1 flex flex-col justify-center items-center gap-3 text-center p-2 relative overflow-hidden rounded-xl">
+                {sessionVideoUrl ? (
+                  <video
+                    src={sessionVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : isPlayingReel && capturedPhotos.length > 0 ? (
                   <div className="absolute inset-0 w-full h-full bg-black">
-                    <img 
-                      src={capturedPhotos[activeReelIndex]} 
-                      style={{ filter: getFilterStyle(selectedFilter, filterIntensity) }}
-                      className="w-full h-full object-cover" 
-                      alt="Reel frame" 
+                    <img
+                      src={capturedPhotos[activeReelIndex]}
+                      style={{
+                        filter: getFilterStyle(selectedFilter, filterIntensity),
+                      }}
+                      className="w-full h-full object-cover"
+                      alt="Reel frame"
                     />
                     <div className="absolute bottom-3 left-3 right-3 flex items-end justify-center gap-1 bg-black/60 py-1.5 px-3 rounded-lg backdrop-blur-sm">
                       <div className="h-4 w-1 bg-[#EA2D2D] animate-[pulse_0.8s_infinite]" />
                       <div className="h-6 w-1 bg-[#EA2D2D] animate-[pulse_0.5s_infinite_0.1s]" />
                       <div className="h-3 w-1 bg-[#EA2D2D] animate-[pulse_0.7s_infinite_0.2s]" />
                       <div className="h-5 w-1 bg-[#EA2D2D] animate-[pulse_0.6s_infinite_0.3s]" />
-                      <span className="font-pixel text-[7px] text-white ml-2">SYNTH_WAVE.MP3</span>
+                      <span className="font-pixel text-[7px] text-white ml-2">
+                        SYNTH_WAVE.MP3
+                      </span>
                     </div>
                   </div>
                 ) : (
@@ -398,71 +828,189 @@ export function ResultPage({
                       <Volume2 size={20} className="animate-pulse" />
                     </div>
                     <div>
-                      <span className="font-pixel text-[9px] text-white block uppercase tracking-wider">REEL READY TO EXPORT</span>
+                      <span className="font-pixel text-[9px] text-white block uppercase tracking-wider">
+                        REEL READY TO EXPORT
+                      </span>
                       <p className="text-[9px] text-gray-500 mt-1 max-w-[180px] leading-relaxed mx-auto font-sans">
-                        Press PLAY to preview · Download ZIP to get the real WebM video file.
+                        Tekan PLAY untuk pratinjau · Unduh ZIP untuk berkas
+                        WebM/MP4 utuh.
                       </p>
                     </div>
                   </>
                 )}
               </div>
 
-              <motion.button 
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                type="button"
-                onClick={() => { 
-                  playSound('click'); 
-                  setIsPlayingReel(!isPlayingReel);
-                  triggerToast(isPlayingReel ? "Reel paused." : "Playing preview reel!");
-                }}
-                className={`w-full py-3 ${isPlayingReel ? 'bg-rose-600' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-pixel text-[8px] tracking-widest uppercase rounded-lg transition-colors cursor-pointer`}
-              >
-                {isPlayingReel ? "PAUSE REEL" : "PLAY REEL"}
-              </motion.button>
+              {!sessionVideoUrl && (
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  type="button"
+                  onClick={() => {
+                    playSound("click");
+                    setIsPlayingReel(!isPlayingReel);
+                    triggerToast(
+                      isPlayingReel
+                        ? "Reel dipause."
+                        : "Memutar reel pratinjau!",
+                    );
+                  }}
+                  className={`w-full py-3 ${isPlayingReel ? "bg-rose-600" : "bg-indigo-600 hover:bg-indigo-700"} text-white font-pixel text-[8px] tracking-widest uppercase rounded-lg transition-colors cursor-pointer`}
+                >
+                  {isPlayingReel ? "PAUSE REEL" : "PLAY REEL"}
+                </motion.button>
+              )}
             </motion.div>
           )}
         </div>
 
         <div className="font-pixel text-[9px] text-gray-500 text-center tracking-widest bg-zinc-950 py-2 px-4 rounded-full border border-white/5 shadow-inner">
-          SESSION CODES: <span className="text-white font-bold">{sessionID || "SPZ-2026-6281X"}</span>
+          SESSION CODES:{" "}
+          <span className="text-white font-bold">
+            {sessionID || "SPZ-2026-6281X"}
+          </span>
         </div>
       </div>
 
       {/* RIGHT COLUMN: CTAs */}
       <div className="lg:col-span-6 flex flex-col gap-4">
-        
-        {/* ── PRIMARY: Download Everything as ZIP ── */}
+        {/* REAL-TIME PREPARATION STATUS HUD PANEL */}
+        <div className="bg-[#111111] border-2 border-white/10 p-4 rounded-2xl flex flex-col gap-3 shadow-inner">
+          <div className="flex items-center justify-between">
+            <span className="font-pixel text-[8px] text-gray-400 tracking-wider uppercase">
+              COMPILATION TASK TRACKER
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-2 h-2 rounded-full ${isDownloadEnabled ? "bg-green-500 animate-pulse" : "bg-yellow-500 animate-ping"}`}
+              />
+              <span className="font-pixel text-[8px] text-white uppercase">
+                {getPreparationMessage()}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2.5 mt-1">
+            {/* Task 1: Photo Strip */}
+            <div
+              className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 ${
+                prepStatus.strip === "ready"
+                  ? "bg-green-500/10 border-green-500/30 text-green-400"
+                  : prepStatus.strip === "error"
+                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                    : "bg-white/5 border-white/5 text-gray-400"
+              }`}
+            >
+              {prepStatus.strip === "ready" && <CheckCircle2 size={14} />}
+              {prepStatus.strip === "preparing" && (
+                <Loader2 size={14} className="animate-spin text-yellow-500" />
+              )}
+              {prepStatus.strip === "error" && <AlertTriangle size={14} />}
+              {prepStatus.strip === "idle" && (
+                <div className="w-3.5 h-3.5 rounded-full border border-gray-600" />
+              )}
+              <span className="font-pixel text-[6px] tracking-widest uppercase">
+                STRIP PNG
+              </span>
+            </div>
+
+            {/* Task 2: Animasi GIF */}
+            <div
+              className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 ${
+                prepStatus.gif === "ready"
+                  ? "bg-green-500/10 border-green-500/30 text-green-400"
+                  : prepStatus.gif === "error"
+                    ? "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                    : "bg-white/5 border-white/5 text-gray-400"
+              }`}
+            >
+              {prepStatus.gif === "ready" && <CheckCircle2 size={14} />}
+              {prepStatus.gif === "preparing" && (
+                <Loader2 size={14} className="animate-spin text-yellow-500" />
+              )}
+              {prepStatus.gif === "error" && <AlertTriangle size={14} />}
+              {prepStatus.gif === "idle" && (
+                <div className="w-3.5 h-3.5 rounded-full border border-gray-600" />
+              )}
+              <span className="font-pixel text-[6px] tracking-widest uppercase">
+                10S GIF
+              </span>
+            </div>
+
+            {/* Task 3: Video Session */}
+            <div
+              className={`p-2 rounded-lg border flex flex-col items-center justify-center gap-1 ${
+                prepStatus.video === "ready"
+                  ? "bg-green-500/10 border-green-500/30 text-green-400"
+                  : prepStatus.video === "error"
+                    ? "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                    : "bg-white/5 border-white/5 text-gray-400"
+              }`}
+            >
+              {prepStatus.video === "ready" && <CheckCircle2 size={14} />}
+              {prepStatus.video === "preparing" && (
+                <Loader2 size={14} className="animate-spin text-yellow-500" />
+              )}
+              {prepStatus.video === "error" && <AlertTriangle size={14} />}
+              {prepStatus.video === "idle" && (
+                <div className="w-3.5 h-3.5 rounded-full border border-gray-600" />
+              )}
+              <span className="font-pixel text-[6px] tracking-widest uppercase">
+                REEL HD
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── PRIMARY: Download Everything as ZIP (Terbuka instan) ── */}
         <motion.button
-          whileHover={isGeneratingZip ? {} : { scale: 1.02, boxShadow: '0 0 30px rgba(234,45,45,0.5)' }}
-          whileTap={isGeneratingZip ? {} : { scale: 0.98 }}
+          whileHover={
+            !isDownloadEnabled || isGeneratingZip
+              ? {}
+              : { scale: 1.02, boxShadow: "0 0 30px rgba(234,45,45,0.5)" }
+          }
+          whileTap={
+            !isDownloadEnabled || isGeneratingZip ? {} : { scale: 0.98 }
+          }
           type="button"
           onClick={handleDownloadZip}
-          disabled={isGeneratingZip}
-          className={`w-full py-5 rounded-xl text-white font-black uppercase text-xs tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2.5 shadow-xl font-display border-2 relative overflow-hidden ${
-            isGeneratingZip
-              ? 'bg-zinc-800 border-white/10 cursor-not-allowed'
-              : 'bg-gradient-to-br from-[#EA2D2D] via-red-600 to-rose-700 border-[#EA2D2D]/40'
+          disabled={!isDownloadEnabled || isGeneratingZip}
+          className={`w-full py-5 rounded-xl text-white font-black uppercase text-xs tracking-widest transition-all flex items-center justify-center gap-2.5 shadow-xl font-display border-2 relative overflow-hidden ${
+            !isDownloadEnabled
+              ? "bg-zinc-900 border-white/5 text-gray-500 cursor-not-allowed"
+              : isGeneratingZip
+                ? "bg-zinc-800 border-white/10 cursor-not-allowed"
+                : "bg-gradient-to-br from-[#EA2D2D] via-red-600 to-rose-700 border-[#EA2D2D]/40 cursor-pointer"
           }`}
           style={{ borderRadius: "16px" }}
         >
-          {/* Shimmer sweep on idle */}
-          {!isGeneratingZip && (
+          {isDownloadEnabled && !isGeneratingZip && (
             <motion.div
               className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 pointer-events-none"
-              animate={{ x: ['-200%', '200%'] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1 }}
+              animate={{ x: ["-200%", "200%"] }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                ease: "easeInOut",
+                repeatDelay: 1,
+              }}
             />
           )}
           {isGeneratingZip ? (
             <>
               <Loader2 size={16} className="animate-spin shrink-0" />
-              <span className="truncate max-w-[220px]">{zipProgress || 'GENERATING...'}</span>
+              <span className="truncate max-w-[220px]">
+                {zipProgress || "GENERATING..."}
+              </span>
+            </>
+          ) : !isDownloadEnabled ? (
+            <>
+              <Loader2 size={16} className="animate-spin text-yellow-500" />
+              RENDERING BACKGROUND ASSETS...
             </>
           ) : (
             <>
               <Archive size={16} className="shrink-0" />
-              DOWNLOAD ALL AS ZIP
+              DOWNLOAD ALL AS ZIP (FAST)
             </>
           )}
         </motion.button>
@@ -470,21 +1018,41 @@ export function ResultPage({
         {/* ZIP contents legend */}
         <div className="bg-white/3 border border-white/8 rounded-xl px-4 py-3 grid grid-cols-3 gap-3 text-center">
           {[
-            { label: 'PHOTO STRIP', sub: '.png', color: 'text-[#FF9A9A]' },
-            { label: 'VIDEO REEL', sub: '.webm', color: 'text-indigo-400' },
-            { label: 'PHOTOS', sub: `×${capturedPhotos.length} files`, color: 'text-emerald-400' },
-          ].map(item => (
-            <div key={item.label} className="flex flex-col items-center gap-0.5">
+            { label: "PHOTO STRIP", sub: ".png", color: "text-[#FF9A9A]" },
+            {
+              label: "ANIMATED GIF",
+              sub: "10-sec .gif",
+              color: "text-amber-400",
+            },
+            {
+              label: sessionVideoBlob ? "LIVE SESSION" : "VIDEO REEL",
+              sub: `.${videoFileExt}`,
+              color: "text-indigo-400",
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex flex-col items-center gap-0.5"
+            >
               <PackageCheck size={14} className={item.color} />
-              <span className={`font-pixel text-[7px] uppercase tracking-wider ${item.color}`}>{item.label}</span>
-              <span className="font-mono text-[8px] text-gray-500">{item.sub}</span>
+              <span
+                className={`font-pixel text-[7px] uppercase tracking-wider ${item.color}`}
+              >
+                {item.label}
+              </span>
+              <span className="font-mono text-[8px] text-gray-500">
+                {item.sub}
+              </span>
             </div>
           ))}
         </div>
 
         {/* ── SECONDARY: Save PNG only ── */}
         <motion.button
-          whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.07)' }}
+          whileHover={{
+            scale: 1.01,
+            backgroundColor: "rgba(255,255,255,0.07)",
+          }}
           whileTap={{ scale: 0.99 }}
           type="button"
           onClick={handleDownloadDisk}
@@ -496,14 +1064,19 @@ export function ResultPage({
         </motion.button>
 
         {/* Send via email */}
-        <form onSubmit={handleEmailSubmit} className="bg-[#111111] border border-white/10 p-5 rounded-2xl flex flex-col gap-4 shadow-inner">
+        <form
+          onSubmit={handleEmailSubmit}
+          className="bg-[#111111] border border-white/10 p-5 rounded-2xl flex flex-col gap-4 shadow-inner"
+        >
           <div className="flex items-center gap-2 pb-1.5 border-b border-white/5">
             <Mail size={14} className="text-[#FF9A9A]" />
-            <span className="text-xs font-pixel text-gray-300 uppercase tracking-widest">SEND TO REGISTERED MAILBOX</span>
+            <span className="text-xs font-pixel text-gray-300 uppercase tracking-widest">
+              SEND TO REGISTERED MAILBOX
+            </span>
           </div>
-          
+
           <div className="flex gap-2.5">
-            <input 
+            <input
               type="email"
               required
               placeholder="e.g. yourname@domain.com"
@@ -526,7 +1099,7 @@ export function ResultPage({
 
           <AnimatePresence>
             {emailSuccessMessage && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -541,24 +1114,56 @@ export function ResultPage({
 
         {/* Viral Share Buttons */}
         <div className="bg-[#111111] border border-white/10 p-4 rounded-2xl flex flex-col gap-3">
-          <span className="text-[8px] font-pixel text-gray-500 tracking-widest uppercase">VIRAL SHARING NETWORK PORTAL</span>
+          <span className="text-[8px] font-pixel text-gray-500 tracking-widest uppercase">
+            VIRAL SHARING NETWORK PORTAL
+          </span>
           <div className="grid grid-cols-5 gap-2 text-xs text-center font-mono">
             {[
-              { icon: <Instagram size={14} className="text-pink-400" />, label: 'INSTA', color: 'hover:bg-pink-500/10 hover:border-pink-500/30', toast: 'Instagram tag string copied!' },
-              { icon: <Share2 size={14} className="text-emerald-400" />, label: 'WA', color: 'hover:bg-emerald-500/10 hover:border-emerald-500/30', toast: 'WhatsApp story link active!' },
-              { icon: <Award size={14} className="text-cyan-400" />, label: 'TIKTOK', color: 'hover:bg-cyan-500/10 hover:border-cyan-500/30', toast: 'TikTok tag presets active!' },
-              { icon: <Twitter size={14} className="text-[#2E90FA]" />, label: 'X', color: 'hover:bg-[#2E90FA]/10 hover:border-[#2E90FA]/30', toast: 'X sharing template generated!' },
-              { icon: <RefreshCw size={13} className="text-amber-400" />, label: 'LINK', color: 'hover:bg-amber-500/10 hover:border-amber-500/30', toast: 'Share link copied!' },
+              {
+                icon: <Instagram size={14} className="text-pink-400" />,
+                label: "INSTA",
+                color: "hover:bg-pink-500/10 hover:border-pink-500/30",
+                toast: "Instagram tag string copied!",
+              },
+              {
+                icon: <Share2 size={14} className="text-emerald-400" />,
+                label: "WA",
+                color: "hover:bg-emerald-500/10 hover:border-emerald-500/30",
+                toast: "WhatsApp story link active!",
+              },
+              {
+                icon: <Award size={14} className="text-cyan-400" />,
+                label: "TIKTOK",
+                color: "hover:bg-cyan-500/10 hover:border-cyan-500/30",
+                toast: "TikTok tag presets active!",
+              },
+              {
+                icon: <Twitter size={14} className="text-[#2E90FA]" />,
+                label: "X",
+                color: "hover:bg-[#2E90FA]/10 hover:border-[#2E90FA]/30",
+                toast: "X sharing template generated!",
+              },
+              {
+                icon: <RefreshCw size={13} className="text-amber-400" />,
+                label: "LINK",
+                color: "hover:bg-amber-500/10 hover:border-amber-500/30",
+                toast: "Share link copied!",
+              },
             ].map((item) => (
               <motion.button
                 key={item.label}
                 whileHover={{ y: -3, scale: 1.05 }}
                 type="button"
-                onClick={() => { playSound('click'); triggerToast(item.toast); }}
+                onClick={() => {
+                  playSound("click");
+                  triggerToast(item.toast);
+                }}
                 className={`py-3 bg-white/5 border border-white/5 text-gray-400 hover:text-white ${item.color} rounded-xl transition-all cursor-pointer flex flex-col items-center gap-1.5`}
               >
                 {item.icon}
-                <span className="text-[8px] font-pixel tracking-wider uppercase">{item.label}</span>
+                <span className="text-[8px] font-pixel tracking-wider uppercase">
+                  {item.label}
+                </span>
               </motion.button>
             ))}
           </div>
@@ -570,14 +1175,20 @@ export function ResultPage({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             type="button"
-            onClick={() => { playSound('click'); setPage(7); }}
+            onClick={() => {
+              playSound("click");
+              setPage(7);
+            }}
             className="flex-1 py-4 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 font-pixel text-[8px] tracking-widest uppercase rounded-xl transition-colors cursor-pointer text-center"
             style={{ borderRadius: "14px" }}
           >
             ← BACK TO STYLING
           </motion.button>
           <motion.button
-            whileHover={{ scale: 1.02, boxShadow: '0 0 15px rgba(234,45,45,0.2)' }}
+            whileHover={{
+              scale: 1.02,
+              boxShadow: "0 0 15px rgba(234,45,45,0.2)",
+            }}
             whileTap={{ scale: 0.98 }}
             type="button"
             onClick={resetEntireSession}
@@ -587,51 +1198,54 @@ export function ResultPage({
             START AGAIN (RESET)
           </motion.button>
         </div>
-
       </div>
     </motion.div>
   );
 }
 
 // ─── Animated GIF Preview Player ───
-function SimpleGifPlayer({ 
-  photos, filter, intensity, filterFunc, frame 
-}: { 
-  photos: string[]; 
-  filter: string; 
-  intensity: number; 
+function SimpleGifPlayer({
+  photos,
+  filter,
+  intensity,
+  filterFunc,
+  frame,
+}: {
+  photos: string[];
+  filter: string;
+  intensity: number;
   filterFunc: (f: string, i: number) => string;
-  frame: FrameTemplate;
+  frame: FrameTemplate | CustomFrame;
 }) {
   const [frameIndex, setFrameIndex] = useState(0);
 
   useEffect(() => {
     if (photos.length <= 1) return;
     const interval = setInterval(() => {
-      setFrameIndex(prev => (prev + 1) % photos.length);
+      setFrameIndex((prev) => (prev + 1) % photos.length);
     }, 450);
     return () => clearInterval(interval);
   }, [photos]);
 
-  const activePhoto = photos[frameIndex] || "https://picsum.photos/seed/purikuragif/500/380";
+  const activePhoto =
+    photos[frameIndex] || "https://picsum.photos/seed/purikuragif/500/380";
 
   return (
     <div className="w-full h-full relative">
       <AnimatePresence mode="wait">
-        <motion.img 
+        <motion.img
           key={frameIndex}
           initial={{ opacity: 0.85 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0.85 }}
           transition={{ duration: 0.15 }}
-          src={activePhoto} 
-          style={{ filter: filterFunc(filter, intensity) }} 
-          className="w-full h-full object-cover" 
-          alt="Animated GIF slideshow" 
+          src={activePhoto}
+          style={{ filter: filterFunc(filter, intensity) }}
+          className="w-full h-full object-cover"
+          alt="Animated GIF slideshow"
         />
       </AnimatePresence>
-      {/* Frame color tint overlay */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none z-10 mix-blend-color opacity-20"
         style={{ backgroundColor: frame.borderColor }}
       />

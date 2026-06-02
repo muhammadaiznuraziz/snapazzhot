@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import {
   ArrowLeft,
@@ -7,8 +7,14 @@ import {
   Sparkles,
   Layers,
   CheckCircle2,
+  Plus,
+  X,
+  Upload,
+  Image,
+  Trash2,
 } from "lucide-react";
 import {
+  CustomFrame,
   FrameTemplate,
   LAYOUT_PRESETS,
   LayoutPreset,
@@ -17,8 +23,8 @@ import { LayoutRenderer } from "../LayoutRenderer";
 
 interface ChooseLayoutViewProps {
   framesList: FrameTemplate[];
-  selectedFrame: FrameTemplate;
-  setSelectedFrame: (frame: FrameTemplate) => void;
+  selectedFrame: FrameTemplate | CustomFrame;
+  setSelectedFrame: (frame: FrameTemplate | CustomFrame) => void;
   selectedLayoutId: string;
   setSelectedLayoutId: (id: string) => void;
   photoStripLayout: number;
@@ -27,6 +33,8 @@ interface ChooseLayoutViewProps {
   setCategoryFilter: (cat: string) => void;
   playSound: (type: "click" | "shutter" | "countdown" | "complete") => void;
   setPage: (page: number) => void;
+  customFrames?: CustomFrame[];
+  setCustomFrames?: (frames: CustomFrame[]) => void;
 }
 
 export function ChooseLayoutView({
@@ -41,8 +49,17 @@ export function ChooseLayoutView({
   setCategoryFilter,
   playSound,
   setPage,
+  customFrames = [],
+  setCustomFrames,
 }: ChooseLayoutViewProps) {
   const [poseGroupFilter, setPoseGroupFilter] = useState("All");
+
+  // Upload state
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [previewFrame, setPreviewFrame] = useState<string | null>(null);
+  const [frameName, setFrameName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeLayout =
     LAYOUT_PRESETS.find((l) => l.id === selectedLayoutId) || LAYOUT_PRESETS[0];
@@ -64,6 +81,10 @@ export function ChooseLayoutView({
       title: "4 POSES QUAD",
       layouts: LAYOUT_PRESETS.filter((l) => l.poseCount === 4),
     },
+  ];
+  const frameCategories = [
+    "All",
+    ...Array.from(new Set(framesList.map((frame) => frame.category))),
   ];
 
   const handleSelectLayout = (layout: LayoutPreset) => {
@@ -102,6 +123,89 @@ export function ChooseLayoutView({
     },
   } as const;
 
+  // Upload handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processFile(e.target.files[0]);
+    }
+  };
+
+  const processFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setPreviewFrame(event.target.result as string);
+        setFrameName(file.name.replace(/\.[^/.]+$/, ""));
+        playSound("complete");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  }, []);
+
+  const handleSaveFrame = () => {
+    if (!previewFrame || !frameName.trim() || !setCustomFrames) return;
+    playSound("complete");
+
+    const colors = [
+      "#EA2D2D",
+      "#FF6B6B",
+      "#FDB022",
+      "#32D583",
+      "#44D7B6",
+      "#6366F1",
+      "#A855F7",
+      "#EC4899",
+    ];
+    const newFrame: CustomFrame = {
+      id: `custom-${Date.now()}`,
+      name: frameName.trim(),
+      imageData: previewFrame,
+      borderColor: colors[Math.floor(Math.random() * colors.length)],
+      textColor: "#ffffff",
+    };
+
+    setCustomFrames([...customFrames, newFrame]);
+    setPreviewFrame(null);
+    setFrameName("");
+    setShowUploadModal(false);
+  };
+
+  const handleDeleteCustomFrame = (frameId: string) => {
+    if (!setCustomFrames) return;
+    playSound("click");
+    setCustomFrames(customFrames.filter((f) => f.id !== frameId));
+    if (selectedFrame && "imageData" in selectedFrame && selectedFrame.id === frameId) {
+      setSelectedFrame(framesList[0]);
+    }
+  };
+
+  // Helper to safely get frame properties (handles both FrameTemplate and CustomFrame)
+  const getFrameProp = (prop: "headerTheme" | "decoStyle", fallback: string) => {
+    if ("imageData" in selectedFrame) {
+      return prop === "headerTheme" ? selectedFrame.name : "custom-frame";
+    }
+    return (selectedFrame as FrameTemplate)[prop] || fallback;
+  };
+
   return (
     <motion.div
       key="page-layout-custom"
@@ -127,7 +231,7 @@ export function ChooseLayoutView({
           </div>
           <LayoutGroup id="deco-filters">
             <div className="flex flex-wrap gap-1.5">
-              {["All", "Football", "Retro", "Aesthetic"].map((cat) => {
+              {frameCategories.map((cat) => {
                 const isActive = categoryFilter === cat;
                 return (
                   <button
@@ -183,49 +287,19 @@ export function ChooseLayoutView({
               <AnimatePresence mode="popLayout">
                 {framesList
                   .filter(
-                    (f) =>
-                      categoryFilter === "All" || f.category === categoryFilter,
+                    (frame) =>
+                      categoryFilter === "All" ||
+                      frame.category === categoryFilter,
                   )
                   .map((frame) => {
                     const isSelected = selectedFrame.id === frame.id;
+
                     return (
                       <motion.button
                         layout
                         variants={itemVariants}
-                        whileHover={{
-                          scale: 1.04,
-                          y: -4,
-                          rotateX: -4,
-                          rotateY: 4,
-                        }}
+                        whileHover={{ scale: 1.04, y: -4 }}
                         whileTap={{ scale: 0.96 }}
-                        animate={
-                          isSelected
-                            ? {
-                                boxShadow: [
-                                  `0 0 10px ${frame.borderColor}20`,
-                                  `0 0 22px ${frame.borderColor}60`,
-                                  `0 0 10px ${frame.borderColor}20`,
-                                ],
-                                borderColor: frame.borderColor,
-                              }
-                            : {
-                                boxShadow: "0 0 0px rgba(0,0,0,0)",
-                                borderColor: "rgba(255,255,255,0.05)",
-                              }
-                        }
-                        transition={{
-                          boxShadow: {
-                            repeat: Infinity,
-                            duration: 2.5,
-                            ease: "easeInOut",
-                          },
-                          default: {
-                            type: "spring",
-                            stiffness: 300,
-                            damping: 22,
-                          },
-                        }}
                         key={frame.id}
                         type="button"
                         onClick={() => {
@@ -237,50 +311,25 @@ export function ChooseLayoutView({
                             ? "bg-[#EA2D2D]/10"
                             : "bg-[#111111]/70 hover:bg-[#151515] hover:border-white/20"
                         }`}
-                        style={{ perspective: 1000 }}
+                        style={{
+                          borderColor: isSelected
+                            ? frame.borderColor
+                            : "rgba(255,255,255,0.05)",
+                          boxShadow: isSelected
+                            ? `0 0 22px ${frame.borderColor}55`
+                            : "none",
+                        }}
                       >
-                        {/* Diagonal Holographic Light Sweep on Hover */}
-                        <motion.div
-                          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.08] to-transparent -skew-x-12 pointer-events-none z-0"
-                          initial={{ left: "-100%" }}
-                          whileHover={{ left: "100%" }}
-                          transition={{ duration: 0.75, ease: "easeOut" }}
+                        <div
+                          className="absolute -right-8 -top-8 w-20 h-20 rounded-full blur-2xl opacity-35 pointer-events-none"
+                          style={{ backgroundColor: frame.borderColor }}
                         />
 
-                        {/* Soft Dynamic Radial Glow at Background corner */}
-                        {isSelected && (
-                          <motion.span
-                            animate={{
-                              scale: [1, 1.15, 1],
-                              opacity: [0.35, 0.55, 0.35],
-                            }}
-                            transition={{
-                              repeat: Infinity,
-                              duration: 3,
-                              ease: "easeInOut",
-                            }}
-                            className="absolute -right-8 -top-8 w-20 h-20 rounded-full blur-2xl pointer-events-none"
-                            style={{ backgroundColor: frame.borderColor }}
-                          />
-                        )}
-
-                        {/* Card Header Content */}
                         <div className="flex items-center justify-between w-full relative z-10">
-                          {/* Rotatable Color Block Preview */}
-                          <motion.div
-                            animate={
-                              isSelected ? { rotate: 360 } : { rotate: 0 }
-                            }
-                            transition={{
-                              type: "spring",
-                              stiffness: 120,
-                              damping: 12,
-                            }}
+                          <div
                             className="w-5 h-5 rounded-md border-2 border-white/30 shadow-inner"
                             style={{ backgroundColor: frame.borderColor }}
                           />
-
-                          {/* Rarity Label with Custom Badging */}
                           <span
                             className={`font-pixel text-[6px] px-1.5 py-0.5 rounded uppercase tracking-wider ${getRarityStyles(frame.rarity)}`}
                           >
@@ -288,18 +337,110 @@ export function ChooseLayoutView({
                           </span>
                         </div>
 
-                        {/* Card Footer Content */}
                         <div className="mt-auto relative z-10 w-full">
                           <span className="font-display font-black text-xs text-white block truncate group-hover:text-[#FF9A9A] transition-colors duration-200">
                             {frame.name}
                           </span>
                           <span className="text-[9px] text-gray-500 font-mono italic block tracking-wide mt-0.5">
-                            {frame.category}
+                            {frame.category} / {frame.layoutCount} pose
                           </span>
                         </div>
                       </motion.button>
                     );
                   })}
+
+                {customFrames.map((frame) => {
+                  const isSelected = selectedFrame.id === frame.id;
+
+                  return (
+                    <motion.button
+                      layout
+                      variants={itemVariants}
+                      whileHover={{ scale: 1.04, y: -4 }}
+                      whileTap={{ scale: 0.96 }}
+                      key={frame.id}
+                      type="button"
+                      onClick={() => {
+                        playSound("click");
+                        setSelectedFrame(frame);
+                      }}
+                      className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between relative overflow-hidden h-28 group ${
+                        isSelected
+                          ? "bg-[#EA2D2D]/10"
+                          : "bg-[#111111]/70 hover:bg-[#151515] hover:border-white/20"
+                      }`}
+                      style={{
+                        borderColor: isSelected
+                          ? frame.borderColor
+                          : "rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <img
+                        src={frame.imageData}
+                        alt={frame.name}
+                        className="absolute inset-0 w-full h-full object-cover opacity-40"
+                      />
+
+                      <div className="flex items-center justify-between w-full relative z-10">
+                        <div
+                          className="w-5 h-5 rounded-md border-2 border-white/30 shadow-inner"
+                          style={{ backgroundColor: frame.borderColor }}
+                        />
+                        <span className="font-pixel text-[6px] px-1.5 py-0.5 rounded uppercase tracking-wider text-cyan-400 border border-cyan-400/30 bg-cyan-400/10">
+                          CUSTOM
+                        </span>
+                      </div>
+
+                      <div className="mt-auto relative z-10 w-full">
+                        <span className="font-display font-black text-xs text-white block truncate group-hover:text-[#FF9A9A] transition-colors duration-200">
+                          {frame.name}
+                        </span>
+                        <span className="text-[9px] text-gray-500 font-mono italic block tracking-wide mt-0.5">
+                          My Frame
+                        </span>
+                      </div>
+
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteCustomFrame(frame.id);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.stopPropagation();
+                            handleDeleteCustomFrame(frame.id);
+                          }
+                        }}
+                        className="absolute top-2 right-2 z-20 w-7 h-7 rounded-lg bg-black/60 border border-white/10 text-gray-300 hover:text-white hover:bg-[#EA2D2D] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                        aria-label={`Delete ${frame.name}`}
+                      >
+                        <Trash2 size={13} />
+                      </span>
+                    </motion.button>
+                  );
+                })}
+
+                <motion.button
+                  layout
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.04, y: -4 }}
+                  whileTap={{ scale: 0.96 }}
+                  type="button"
+                  onClick={() => {
+                    playSound("click");
+                    setShowUploadModal(true);
+                  }}
+                  className="p-3.5 rounded-xl border-2 border-dashed border-white/20 hover:border-[#EA2D2D]/50 bg-[#111111]/30 hover:bg-[#EA2D2D]/5 flex flex-col justify-center items-center gap-2 relative overflow-hidden h-28 cursor-pointer transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#EA2D2D]/20 group-hover:bg-[#EA2D2D]/30 flex items-center justify-center transition-all">
+                    <Plus size={20} className="text-[#EA2D2D]" />
+                  </div>
+                  <span className="text-[10px] font-pixel text-gray-400 group-hover:text-white transition-colors">
+                    UPLOAD FRAME
+                  </span>
+                </motion.button>
               </AnimatePresence>
             </motion.div>
           </div>
@@ -419,14 +560,22 @@ export function ChooseLayoutView({
                             )}
 
                             {/* Frame mini representation container */}
-                            <div className="w-full h-24 flex items-center justify-center p-1 bg-zinc-900 border border-white/5 group-hover:border-white/10 rounded-lg overflow-hidden transition-all relative">
-                              <div className="scale-[0.45] hover:scale-[0.5] transform origin-center transition-transform duration-300 w-full flex items-center justify-center">
+                            <div className="w-full h-36 flex items-center justify-center p-2 bg-zinc-900 border border-white/5 group-hover:border-white/10 rounded-lg overflow-hidden transition-all relative">
+                              <div
+                                className={`transform origin-center transition-transform duration-300 w-full flex items-center justify-center ${
+                                  layout.size === "2x6"
+                                    ? "scale-[0.32] group-hover:scale-[0.36]"
+                                    : "scale-[0.42] group-hover:scale-[0.46]"
+                                }`}
+                              >
                                 <LayoutRenderer
                                   layoutId={layout.id}
                                   borderColor={selectedFrame.borderColor}
                                   textColor={selectedFrame.textColor}
-                                  headerTheme={selectedFrame.headerTheme}
+                                  headerTheme={getFrameProp("headerTheme", "")}
                                   photos={[]}
+                                  decoStyle={getFrameProp("decoStyle", "")}
+                                  customFrameImage={"imageData" in selectedFrame ? selectedFrame.imageData : undefined}
                                 />
                               </div>
                             </div>
@@ -482,7 +631,7 @@ export function ChooseLayoutView({
           </span>
 
           {/* Layout renderer preview stage with CRT Scanline theme */}
-          <div className="bg-zinc-950 py-4 px-4 rounded-xl flex items-center justify-center min-h-[220px] border border-white/5 relative group overflow-hidden">
+          <div className="bg-zinc-950 py-5 px-4 rounded-xl flex items-center justify-center min-h-[340px] border border-white/5 relative group overflow-hidden">
             {/* Holographic Subtle CRT Scanline overlay */}
             <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,6px_100%] pointer-events-none z-20 opacity-40" />
 
@@ -493,14 +642,18 @@ export function ChooseLayoutView({
               initial={{ opacity: 0, scale: 0.95, rotate: -2 }}
               animate={{ opacity: 1, scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className="w-full max-w-[125px] shadow-[0_10px_25px_rgba(0,0,0,0.7)]"
+              className={`w-full shadow-[0_10px_25px_rgba(0,0,0,0.7)] ${
+                activeLayout.size === "2x6" ? "max-w-[82px]" : "max-w-[190px]"
+              }`}
             >
               <LayoutRenderer
                 layoutId={activeLayout.id}
                 borderColor={selectedFrame.borderColor}
                 textColor={selectedFrame.textColor}
-                headerTheme={selectedFrame.headerTheme}
+                headerTheme={getFrameProp("headerTheme", "")}
                 photos={[]}
+                decoStyle={getFrameProp("decoStyle", "")}
+                customFrameImage={"imageData" in selectedFrame ? selectedFrame.imageData : undefined}
               />
             </motion.div>
           </div>
@@ -539,7 +692,7 @@ export function ChooseLayoutView({
             type="button"
             onClick={() => {
               playSound("complete");
-              setPage(4);
+              setPage(6);
             }}
             className="w-full py-3 text-white font-black text-xs uppercase rounded-xl tracking-widest transition-all cursor-pointer mt-1 flex items-center justify-center gap-2 shadow-lg font-display relative z-10"
             style={{
@@ -569,6 +722,121 @@ export function ChooseLayoutView({
           BACK TO HOMEPAGE
         </button>
       </div>
+
+      {/* Upload Modal */}
+      <AnimatePresence>
+        {showUploadModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowUploadModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#111111] border-2 border-white/10 p-6 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col gap-4"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-pixel text-[10px] text-[#ffbe3b] uppercase tracking-wider">
+                  UPLOAD CUSTOM FRAME
+                </span>
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-all cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer min-h-[180px] ${
+                  isDragging
+                    ? "border-[#EA2D2D] bg-[#EA2D2D]/10"
+                    : "border-white/10 hover:border-white/20 bg-black/20"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                <div className="flex flex-col items-center gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDragging ? "bg-[#EA2D2D]/20 text-[#EA2D2D]" : "bg-white/5 text-gray-400"}`}>
+                    <Upload size={20} />
+                  </div>
+                  <div className="text-center">
+                    <span className="font-display font-black text-sm text-white block">
+                      {isDragging ? "DROP HERE!" : "Drop your frame image"}
+                    </span>
+                    <span className="text-gray-500 text-xs font-mono mt-1 block">
+                      or click to browse
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview */}
+              {previewFrame && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
+                    <Image size={12} className="text-[#FF9A9A]" />
+                    FRAME PREVIEW
+                  </div>
+                  <div className="flex items-center justify-center bg-zinc-950 rounded-xl p-4 min-h-[120px] border border-white/5">
+                    <img
+                      src={previewFrame}
+                      alt="Preview"
+                      className="max-w-full max-h-[120px] object-contain rounded-lg"
+                    />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={frameName}
+                    onChange={(e) => setFrameName(e.target.value)}
+                    placeholder="Frame name..."
+                    className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white text-sm font-mono placeholder:text-gray-600 focus:border-[#EA2D2D]/50 focus:outline-none transition-colors"
+                  />
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="flex-1 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 font-pixel text-[9px] tracking-wider uppercase rounded-xl transition-all cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleSaveFrame}
+                  disabled={!previewFrame || !frameName.trim()}
+                  className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    previewFrame && frameName.trim()
+                      ? "bg-[#EA2D2D] hover:bg-[#C61D1D] text-white"
+                      : "bg-white/5 text-gray-600 cursor-not-allowed"
+                  }`}
+                >
+                  <Check size={14} />
+                  SAVE
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

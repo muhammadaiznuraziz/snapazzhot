@@ -10,6 +10,14 @@ export interface FrameTemplate {
   decoStyle: string; // design pattern
 }
 
+export interface CustomFrame {
+  id: string;
+  name: string;
+  imageData: string;
+  borderColor: string;
+  textColor: string;
+}
+
 export interface LayoutPreset {
   id: string;
   name: string;
@@ -48,4 +56,3 @@ export interface GeminiResult {
   stickers: Sticker[];
   fortune: string;
 }
-
