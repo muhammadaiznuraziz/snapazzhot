@@ -57,16 +57,12 @@ export const LAYOUT_METADATA: Record<string, LayoutMetadata> = {
       { x: 40, y: 410, w: 245, h: 245 },
       { x: 315, y: 410, w: 245, h: 245 },
     ],
-    emptyBlocks: [
-      { label: "CHAMPIONS GRID", x: 40, y: 685, w: 520, h: 50 },
-    ],
+    emptyBlocks: [{ label: "CHAMPIONS GRID", x: 40, y: 685, w: 520, h: 50 }],
   },
   LAYOUT_D: {
     canvasWidth: 600,
     canvasHeight: 900,
-    slots: [
-      { x: 50, y: 130, w: 500, h: 600 },
-    ],
+    slots: [{ x: 50, y: 130, w: 500, h: 600 }],
     emptyBlocks: [
       { label: "SINGLE SHOT PORTRAIT", x: 50, y: 755, w: 500, h: 50 },
     ],
@@ -85,12 +81,8 @@ export const LAYOUT_METADATA: Record<string, LayoutMetadata> = {
   LAYOUT_F: {
     canvasWidth: 900,
     canvasHeight: 600,
-    slots: [
-      { x: 120, y: 100, w: 660, h: 380 },
-    ],
-    emptyBlocks: [
-      { label: "LANDSCAPE SOLO", x: 120, y: 500, w: 660, h: 40 },
-    ],
+    slots: [{ x: 120, y: 100, w: 660, h: 380 }],
+    emptyBlocks: [{ label: "LANDSCAPE SOLO", x: 120, y: 500, w: 660, h: 40 }],
   },
   LAYOUT_G: {
     canvasWidth: 900,
@@ -104,104 +96,104 @@ export const LAYOUT_METADATA: Record<string, LayoutMetadata> = {
     ],
   },
   LAYOUT_H: {
-  canvasWidth: 900,
-  canvasHeight: 600,
+    canvasWidth: 900,
+    canvasHeight: 600,
 
-  slots: [
-    // hero
-    { x: 50, y: 110, w: 800, h: 220 },
+    slots: [
+      // hero
+      { x: 50, y: 110, w: 800, h: 220 },
 
-    // bawah kiri
-    { x: 50, y: 350, w: 250, h: 180 },
+      // bawah kiri
+      { x: 50, y: 350, w: 250, h: 180 },
 
-    // bawah tengah
-    { x: 325, y: 350, w: 250, h: 180 },
+      // bawah tengah
+      { x: 325, y: 350, w: 250, h: 180 },
 
-    // bawah kanan
-    { x: 600, y: 350, w: 250, h: 180 },
-  ],
+      // bawah kanan
+      { x: 600, y: 350, w: 250, h: 180 },
+    ],
 
-  emptyBlocks: [
-    {
-      label: "★ DUAL STRIP ARTWORK ★",
-      x: 50,
-      y: 550,
-      w: 800,
-      h: 30,
-    },
-  ],
-},
+    emptyBlocks: [
+      {
+        label: "★ DUAL STRIP ARTWORK ★",
+        x: 50,
+        y: 550,
+        w: 800,
+        h: 30,
+      },
+    ],
+  },
   LAYOUT_I: {
-  canvasWidth: 900,
-  canvasHeight: 600,
-  slots: [
-    // kiri atas
-    { x: 50, y: 110, w: 380, h: 180 },
+    canvasWidth: 900,
+    canvasHeight: 600,
+    slots: [
+      // kiri atas
+      { x: 50, y: 110, w: 380, h: 180 },
 
-    // kiri bawah
-    { x: 50, y: 310, w: 380, h: 180 },
+      // kiri bawah
+      { x: 50, y: 310, w: 380, h: 180 },
 
-    // kanan besar
-    { x: 470, y: 110, w: 380, h: 380 },
-  ],
+      // kanan besar
+      { x: 470, y: 110, w: 380, h: 380 },
+    ],
 
-  emptyBlocks: [
-    {
-      label: "STATION THREE",
-      x: 50,
-      y: 510,
-      w: 800,
-      h: 40,
-    },
-  ],
-},
+    emptyBlocks: [
+      {
+        label: "STATION THREE",
+        x: 50,
+        y: 510,
+        w: 800,
+        h: 40,
+      },
+    ],
+  },
   LAYOUT_J: {
-  canvasWidth: 900,
-  canvasHeight: 600,
+    canvasWidth: 900,
+    canvasHeight: 600,
 
-  slots: [
-    // kanan atas
-    { x: 470, y: 110, w: 380, h: 180 },
+    slots: [
+      // kanan atas
+      { x: 470, y: 110, w: 380, h: 180 },
 
-    // kanan bawah
-    { x: 470, y: 310, w: 380, h: 180 },
+      // kanan bawah
+      { x: 470, y: 310, w: 380, h: 180 },
 
-    // kiri besar
-    { x: 50, y: 110, w: 380, h: 380 },
-  ],
+      // kiri besar
+      { x: 50, y: 110, w: 380, h: 380 },
+    ],
 
-  emptyBlocks: [
-    {
-      label: "SPECTRUM J",
-      x: 50,
-      y: 510,
-      w: 800,
-      h: 40,
-    },
-  ],
-},
+    emptyBlocks: [
+      {
+        label: "SPECTRUM J",
+        x: 50,
+        y: 510,
+        w: 800,
+        h: 40,
+      },
+    ],
+  },
   LAYOUT_K: {
-  canvasWidth: 900,
-  canvasHeight: 600,
+    canvasWidth: 900,
+    canvasHeight: 600,
 
-  slots: [
-    // kiri atas
-    { x: 80, y: 100, w: 260, h: 260 },
+    slots: [
+      // kiri atas
+      { x: 80, y: 100, w: 260, h: 260 },
 
-    // kanan bawah
-    { x: 560, y: 240, w: 260, h: 260 },
-  ],
+      // kanan bawah
+      { x: 560, y: 240, w: 260, h: 260 },
+    ],
 
-  emptyBlocks: [
-    {
-      label: "K-SERIES CO",
-      x: 50,
-      y: 540,
-      w: 800,
-      h: 30,
-    },
-  ],
-},
+    emptyBlocks: [
+      {
+        label: "K-SERIES CO",
+        x: 50,
+        y: 540,
+        w: 800,
+        h: 30,
+      },
+    ],
+  },
 };
 
 interface RenderedSlotProps {
@@ -255,9 +247,10 @@ export function RenderedSlot({
       ? getFilterStyle(selectedFilter, filterIntensity)
       : "";
 
-  const adj = photoAdjustments && photoAdjustments[index]
-    ? photoAdjustments[index]
-    : { x: 0, y: 0, scale: 1.0 };
+  const adj =
+    photoAdjustments && photoAdjustments[index]
+      ? photoAdjustments[index]
+      : { x: 0, y: 0, scale: 1.0 };
 
   // Calculate translation relative to the slot container width/height vs the crop workspace container reference dimensions (280x210)
   const scaleX = dims.w / 280;
@@ -424,7 +417,11 @@ export function LayoutRenderer({
               : undefined,
       };
 
-  const renderSlot = (index: number, aspectClass: string = "aspect-[4/3]", style?: React.CSSProperties) => {
+  const renderSlot = (
+    index: number,
+    aspectClass: string = "aspect-[4/3]",
+    style?: React.CSSProperties,
+  ) => {
     return (
       <RenderedSlot
         index={index}
@@ -441,7 +438,7 @@ export function LayoutRenderer({
     );
   };
 
-  const FrameSurface = ({
+  function FrameSurface({
     children,
     className,
     style,
@@ -449,14 +446,16 @@ export function LayoutRenderer({
     children: React.ReactNode;
     className: string;
     style?: React.CSSProperties;
-  }) => (
-    <div
-      className={`relative overflow-hidden mx-auto ${className}`}
-      style={{ ...frameBackground, ...style }}
-    >
-      {children}
-    </div>
-  );
+  }) {
+    return (
+      <div
+        className={`relative overflow-hidden mx-auto ${className}`}
+        style={{ ...frameBackground, ...style }}
+      >
+        {children}
+      </div>
+    );
+  }
 
   switch (layoutId) {
     case "LAYOUT_A":
@@ -533,113 +532,90 @@ export function LayoutRenderer({
       );
 
     case "LAYOUT_H":
-  return (
-    <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
-      <div className="flex flex-col gap-2 h-full">
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
+          <div className="flex flex-col gap-2 h-full">
+            {/* Hero Photo */}
+            <div>{renderSlot(0, "aspect-[16/5]")}</div>
 
-        {/* Hero Photo */}
-        <div>
-          {renderSlot(0, "", {
-            aspectRatio: "16/5",
-          })}
-        </div>
-
-        {/* Bottom Grid */}
-        <div className="grid grid-cols-3 gap-2 flex-1">
-          {renderSlot(1, "", { aspectRatio: "1/1" })}
-          {renderSlot(2, "", { aspectRatio: "1/1" })}
-          {renderSlot(3, "", { aspectRatio: "1/1" })}
-        </div>
-
-      </div>
-    </FrameSurface>
-  );
+            {/* Bottom Grid */}
+            <div className="grid grid-cols-3 gap-2 flex-1">
+              {renderSlot(1, "aspect-square")}
+              {renderSlot(2, "aspect-square")}
+              {renderSlot(3, "aspect-square")}
+            </div>
+          </div>
+        </FrameSurface>
+      );
 
     case "LAYOUT_I":
-  return (
-    <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
-      <div className="grid grid-cols-[1fr_1fr] gap-2 h-full">
-        
-        {/* kiri */}
-        <div className="flex flex-col gap-2 h-full">
-          {renderSlot(0, "", {
-            aspectRatio: "19/9",
-            className: "flex-1",
-          })}
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
+          <div className="grid grid-cols-[1fr_1fr] gap-2 h-full">
+            {/* kiri */}
+            <div className="flex flex-col gap-2 h-full">
+              {renderSlot(0, "aspect-[19/9]")}
 
-          {renderSlot(1, "", {
-            aspectRatio: "19/9",
-            className: "flex-1",
-          })}
-        </div>
+              {renderSlot(1, "aspect-[19/9]")}
+            </div>
 
-        {/* kanan */}
-        <div className="h-full">
-          {renderSlot(2, "", {
-            aspectRatio: "1/1",
-            className: "h-full",
-          })}
-        </div>
-
-      </div>
-    </FrameSurface>
-  );
+            {/* kanan */}
+            <div className="h-full">{renderSlot(2, "aspect-square")}</div>
+          </div>
+        </FrameSurface>
+      );
 
     case "LAYOUT_J":
-  return (
-    <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
-      <div className="grid grid-cols-[1fr_1fr] gap-2 h-full">
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
+          <div className="grid grid-cols-[1fr_1fr] gap-2 h-full">
+            {/* kiri besar */}
+            <div className="h-full">
+              {renderSlot(2, "", {
+                aspectRatio: "1/1",
+              })}
+            </div>
 
-        {/* kiri besar */}
-        <div className="h-full">
-          {renderSlot(2, "", {
-            aspectRatio: "1/1",
-          })}
-        </div>
+            {/* kanan */}
+            <div className="flex flex-col gap-2 h-full">
+              <div className="flex-1">
+                {renderSlot(0, "", {
+                  aspectRatio: "19/9",
+                })}
+              </div>
 
-        {/* kanan */}
-        <div className="flex flex-col gap-2 h-full">
-          <div className="flex-1">
-            {renderSlot(0, "", {
-              aspectRatio: "19/9",
-            })}
+              <div className="flex-1">
+                {renderSlot(1, "", {
+                  aspectRatio: "19/9",
+                })}
+              </div>
+            </div>
           </div>
+        </FrameSurface>
+      );
 
-          <div className="flex-1">
-            {renderSlot(1, "", {
-              aspectRatio: "19/9",
-            })}
+    case "LAYOUT_K":
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/3]">
+          <div className="grid grid-cols-2 grid-rows-2 gap-2 h-full">
+            {/* kiri atas */}
+            <div className="aspect-square">
+              {renderSlot(0, "", { aspectRatio: "1/1" })}
+            </div>
+
+            {/* kanan atas kosong */}
+            <div />
+
+            {/* kiri bawah kosong */}
+            <div />
+
+            {/* kanan bawah */}
+            <div className="aspect-square">
+              {renderSlot(1, "", { aspectRatio: "1/1" })}
+            </div>
           </div>
-        </div>
-
-      </div>
-    </FrameSurface>
-  );
-
-case "LAYOUT_K":
-  return (
-    <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/3]">
-      <div className="grid grid-cols-2 grid-rows-2 gap-2 h-full">
-
-        {/* kiri atas */}
-        <div className="aspect-square">
-          {renderSlot(0, "", { aspectRatio: "1/1" })}
-        </div>
-
-        {/* kanan atas kosong */}
-        <div />
-
-        {/* kiri bawah kosong */}
-        <div />
-
-        {/* kanan bawah */}
-        <div className="aspect-square">
-          {renderSlot(1, "", { aspectRatio: "1/1" })}
-        </div>
-
-      </div>
-    </FrameSurface>
-  );
+        </FrameSurface>
+      );
 
     default:
       return (
