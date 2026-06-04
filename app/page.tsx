@@ -19,6 +19,8 @@ import { PhotoSessionPage } from "../components/views/PhotoSessionPage";
 import { FilterSelectionPage } from "../components/views/FilterSelectionPage";
 import { ResultPage } from "../components/views/ResultPage";
 import { Navbar } from "../components/Navbar/Navbar";
+import { supabase } from "../utils/supabase";
+import { LAYOUT_METADATA } from "../components/LayoutRenderer";
 
 // Design Token Colors
 const BRAND_RED = "#EA2D2D";
@@ -371,6 +373,37 @@ export default function SnapazPhotobooth() {
   // Custom frames state
   const [customFrames, setCustomFrames] = useState<CustomFrame[]>([]);
 
+  // Load custom frames from Supabase
+  useEffect(() => {
+    async function loadCustomFrames() {
+      try {
+        const { data, error } = await supabase
+          .from("custom_frames")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Error loading frames from Supabase:", error);
+          return;
+        }
+
+        if (data) {
+          const loadedFrames: CustomFrame[] = data.map((item) => ({
+            id: item.id,
+            name: item.name,
+            imageData: item.image_url,
+            borderColor: item.border_color || "#EA2D2D",
+            textColor: item.text_color || "#ffffff",
+          }));
+          setCustomFrames(loadedFrames);
+        }
+      } catch (err) {
+        console.error("Failed to load frames", err);
+      }
+    }
+    loadCustomFrames();
+  }, []);
+
   // Layout selections
   const [selectedFrame, setSelectedFrame] = useState<FrameTemplate | CustomFrame>(
     FRAMES_LIST[0],
@@ -393,6 +426,9 @@ export default function SnapazPhotobooth() {
 
   // Captures state
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
+  const [photoAdjustments, setPhotoAdjustments] = useState<{
+    [key: number]: { x: number; y: number; scale: number };
+  }>({});
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isShooting, setIsShooting] = useState<boolean>(false);
@@ -839,28 +875,11 @@ export default function SnapazPhotobooth() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Determine canvas dimensions based on the selected layout ID
-    let canvasWidth = 400;
-    let canvasHeight = 1120;
+    const layoutConfig = LAYOUT_METADATA[selectedLayoutId];
+    if (!layoutConfig) return;
 
-    if (selectedLayoutId === "LAYOUT_A") {
-      canvasWidth = 400;
-      canvasHeight = 1120;
-    } else if (selectedLayoutId === "LAYOUT_B") {
-      canvasWidth = 400;
-      canvasHeight = 1380;
-    } else if (
-      selectedLayoutId === "LAYOUT_C" ||
-      selectedLayoutId === "LAYOUT_D" ||
-      selectedLayoutId === "LAYOUT_E"
-    ) {
-      canvasWidth = 600;
-      canvasHeight = 900;
-    } else {
-      // Landscape layouts (LAYOUT_F to LAYOUT_K) are size 4x6 LANDSCAPE
-      canvasWidth = 900;
-      canvasHeight = 600;
-    }
+    const canvasWidth = layoutConfig.canvasWidth;
+    const canvasHeight = layoutConfig.canvasHeight;
 
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -868,6 +887,20 @@ export default function SnapazPhotobooth() {
     // Draw frame background
     ctx.fillStyle = selectedFrame.borderColor;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Draw custom frame image as background if available
+    if ("imageData" in selectedFrame && selectedFrame.imageData) {
+      const frameImg = new Image();
+      frameImg.crossOrigin = "anonymous";
+      await new Promise<void>((resolve) => {
+        frameImg.onload = () => {
+          ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
+          resolve();
+        };
+        frameImg.onerror = () => resolve();
+        frameImg.src = selectedFrame.imageData;
+      });
+    }
 
     // Apply background textures or decoration styles
     const decoStyle = getFrameProp("decoStyle", "");
@@ -980,6 +1013,10 @@ export default function SnapazPhotobooth() {
         ctx.save();
         ctx.filter = getCanvasFilterString(selectedFilter, filterIntensity);
 
+        const adj = photoAdjustments && photoAdjustments[idx]
+          ? photoAdjustments[idx]
+          : { x: 0, y: 0, scale: 1.0 };
+
         // Emulate object-cover aspect ratio calculation
         const imgRatio = img.width / img.height;
         const slotRatio = w / h;
@@ -996,7 +1033,23 @@ export default function SnapazPhotobooth() {
           sy = (img.height - sh) / 2;
         }
 
-        ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+        // Apply scale & adjustments
+        const sw_final = sw / adj.scale;
+        const sh_final = sh / adj.scale;
+
+        // Translation in source image coordinates
+        const tx_src = (adj.x * sw) / (280 * adj.scale);
+        const ty_src = (adj.y * sh) / (210 * adj.scale);
+
+        // Center zoom coordinate translation
+        let sx_final = sx + (sw - sw_final) / 2 - tx_src;
+        let sy_final = sy + (sh - sh_final) / 2 - ty_src;
+
+        // Clip/boundary checks to keep image within bounds
+        sx_final = Math.max(0, Math.min(img.width - sw_final, sx_final));
+        sy_final = Math.max(0, Math.min(img.height - sh_final, sy_final));
+
+        ctx.drawImage(img, sx_final, sy_final, sw_final, sh_final, x, y, w, h);
         ctx.restore();
       } else {
         // Fallback placeholder block if snap didn't exist or failed
@@ -1036,100 +1089,15 @@ export default function SnapazPhotobooth() {
       ctx.fillText(label, x + w / 2, y + h / 2 + 3);
     };
 
-    // Render slots depending on chosen layout ID preset
-    switch (selectedLayoutId) {
-      case "LAYOUT_A": {
-        drawCanvasPhotoSlot(loadedImgs[0], 30, 100, 340, 255, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 30, 380, 340, 255, 1);
-        drawCanvasPhotoSlot(loadedImgs[2], 30, 660, 340, 255, 2);
-        drawEmptyBlackBlock("SNAPAZZHOT ORIGINAL TALL", 30, 940, 340, 60);
-        break;
-      }
-      case "LAYOUT_B": {
-        drawCanvasPhotoSlot(loadedImgs[0], 30, 100, 340, 255, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 30, 380, 340, 255, 1);
-        drawCanvasPhotoSlot(loadedImgs[2], 30, 660, 340, 255, 2);
-        drawCanvasPhotoSlot(loadedImgs[3], 30, 940, 340, 255, 3);
-        drawEmptyBlackBlock("SNAPAZZHOT QUADRANT", 30, 1210, 340, 60);
-        break;
-      }
-      case "LAYOUT_C": {
-        drawCanvasPhotoSlot(loadedImgs[0], 40, 130, 245, 245, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 315, 130, 245, 245, 1);
-        drawCanvasPhotoSlot(loadedImgs[2], 40, 410, 245, 245, 2);
-        drawCanvasPhotoSlot(loadedImgs[3], 315, 410, 245, 245, 3);
-        drawEmptyBlackBlock("CHAMPIONS GRID", 40, 685, 520, 50);
-        break;
-      }
-      case "LAYOUT_D": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 130, 500, 600, 0);
-        drawEmptyBlackBlock("SINGLE SHOT PORTRAIT", 50, 755, 500, 50);
-        break;
-      }
-      case "LAYOUT_E": {
-        drawCanvasPhotoSlot(loadedImgs[0], 40, 130, 520, 280, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 40, 440, 520, 280, 1);
-        drawEmptyBlackBlock("DUAL STACK PORTRAIT", 40, 755, 520, 50);
-        break;
-      }
-      case "LAYOUT_F": {
-        drawCanvasPhotoSlot(loadedImgs[0], 120, 100, 660, 380, 0);
-        drawEmptyBlackBlock("LANDSCAPE SOLO", 120, 500, 660, 40);
-        break;
-      }
-      case "LAYOUT_G": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 110, 380, 360, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 470, 110, 380, 360, 1);
-        drawEmptyBlackBlock("SIDE BY SIDE LANDSCAPE", 50, 490, 800, 40);
-        break;
-      }
-      case "LAYOUT_H": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 110, 380, 180, 0);
-        drawEmptyBlackBlock("SNAPAZZHOT ARTWORK", 470, 110, 380, 180);
-        drawCanvasPhotoSlot(loadedImgs[1], 50, 310, 250, 180, 1);
-        drawCanvasPhotoSlot(loadedImgs[2], 325, 310, 250, 180, 2);
-        drawCanvasPhotoSlot(loadedImgs[3], 600, 310, 250, 180, 3);
-        drawEmptyBlackBlock("★ DUAL STRIP ARTWORK ★", 50, 510, 800, 40);
-        break;
-      }
-      case "LAYOUT_I": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 110, 380, 180, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 50, 310, 380, 180, 1);
-        drawEmptyBlackBlock("ARCHIVE-M ARTWORK", 470, 110, 380, 180);
-        drawCanvasPhotoSlot(loadedImgs[2], 470, 310, 380, 180, 2);
-        drawEmptyBlackBlock("STATION THREE", 50, 510, 800, 40);
-        break;
-      }
-      case "LAYOUT_J": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 110, 380, 180, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 50, 310, 380, 180, 1);
-        drawCanvasPhotoSlot(loadedImgs[2], 470, 110, 380, 180, 2);
-        drawEmptyBlackBlock("RETRO-GLOW", 470, 310, 380, 180);
-        drawEmptyBlackBlock("SPECTRUM J", 50, 510, 800, 40);
-        break;
-      }
-      case "LAYOUT_K": {
-        drawCanvasPhotoSlot(loadedImgs[0], 50, 110, 380, 180, 0);
-        drawCanvasPhotoSlot(loadedImgs[1], 50, 310, 380, 180, 1);
-        drawEmptyBlackBlock("VOID SECTIONS", 470, 110, 380, 380);
-        drawEmptyBlackBlock("K-SERIES CO", 50, 510, 800, 40);
-        break;
-      }
-    }
+    // Draw all slots
+    layoutConfig.slots.forEach((slot, idx) => {
+      drawCanvasPhotoSlot(loadedImgs[idx], slot.x, slot.y, slot.w, slot.h, idx);
+    });
 
-    // Draw custom frame image overlay if available (after photos but before text)
-    if ("imageData" in selectedFrame && selectedFrame.imageData) {
-      const frameImg = new Image();
-      frameImg.crossOrigin = "anonymous";
-      await new Promise<void>((resolve) => {
-        frameImg.onload = () => {
-          ctx.drawImage(frameImg, 0, 0, canvasWidth, canvasHeight);
-          resolve();
-        };
-        frameImg.onerror = () => resolve();
-        frameImg.src = selectedFrame.imageData;
-      });
-    }
+    // Draw all empty artwork blocks
+    layoutConfig.emptyBlocks.forEach((block) => {
+      drawEmptyBlackBlock(block.label, block.x, block.y, block.w, block.h);
+    });
 
     const themeStickers = (() => {
       if (decoStyle.includes("football") || decoStyle.includes("stadium") || decoStyle.includes("pitch") || decoStyle.includes("cup") || decoStyle.includes("ultras")) {
@@ -1309,6 +1277,7 @@ export default function SnapazPhotobooth() {
     setFinalCompositedImage("");
     setEmailSuccessMessage("");
     setEmailInput("");
+    setPhotoAdjustments({});
     setPage(3);
   };
 
@@ -1405,6 +1374,8 @@ export default function SnapazPhotobooth() {
               getFilterStyle={getFilterStyle}
               playSound={playSound}
               setPage={setPage}
+              photoAdjustments={photoAdjustments}
+              setPhotoAdjustments={setPhotoAdjustments}
             />
           )}
 
@@ -1419,6 +1390,7 @@ export default function SnapazPhotobooth() {
               getFilterStyle={getFilterStyle}
               sessionID={sessionID}
               selectedFrame={selectedFrame}
+              selectedLayoutId={selectedLayoutId}
               geminiResult={geminiResult}
               handleDownloadDisk={handleDownloadDisk}
               handleEmailSubmit={handleEmailSubmit}
@@ -1429,6 +1401,7 @@ export default function SnapazPhotobooth() {
               resetEntireSession={resetEntireSession}
               playSound={playSound}
               setPage={setPage}
+              photoAdjustments={photoAdjustments}
             />
           )}
         </AnimatePresence>

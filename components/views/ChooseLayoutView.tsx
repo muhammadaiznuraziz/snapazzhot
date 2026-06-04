@@ -20,6 +20,7 @@ import {
   LayoutPreset,
 } from "../../types/photobooth";
 import { LayoutRenderer } from "../LayoutRenderer";
+import { supabase } from "../../utils/supabase";
 
 interface ChooseLayoutViewProps {
   framesList: FrameTemplate[];
@@ -59,6 +60,7 @@ export function ChooseLayoutView({
   const [previewFrame, setPreviewFrame] = useState<string | null>(null);
   const [frameName, setFrameName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeLayout =
@@ -161,45 +163,135 @@ export function ChooseLayoutView({
     }
   }, []);
 
-  const handleSaveFrame = () => {
-    if (!previewFrame || !frameName.trim() || !setCustomFrames) return;
-    playSound("complete");
-
-    const colors = [
-      "#EA2D2D",
-      "#FF6B6B",
-      "#FDB022",
-      "#32D583",
-      "#44D7B6",
-      "#6366F1",
-      "#A855F7",
-      "#EC4899",
-    ];
-    const newFrame: CustomFrame = {
-      id: `custom-${Date.now()}`,
-      name: frameName.trim(),
-      imageData: previewFrame,
-      borderColor: colors[Math.floor(Math.random() * colors.length)],
-      textColor: "#ffffff",
-    };
-
-    setCustomFrames([...customFrames, newFrame]);
-    setPreviewFrame(null);
-    setFrameName("");
-    setShowUploadModal(false);
+  // Helper to convert base64 to blob
+  const dataURLtoBlob = (dataurl: string) => {
+    const arr = dataurl.split(",");
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/png";
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
   };
 
-  const handleDeleteCustomFrame = (frameId: string) => {
+  const handleSaveFrame = async () => {
+    if (!previewFrame || !frameName.trim() || !setCustomFrames) return;
+    setIsUploading(true);
+
+    try {
+      const colors = [
+        "#EA2D2D",
+        "#FF6B6B",
+        "#FDB022",
+        "#32D583",
+        "#44D7B6",
+        "#6366F1",
+        "#A855F7",
+        "#EC4899",
+      ];
+      const borderColor = colors[Math.floor(Math.random() * colors.length)];
+      const fileId = `frame_${Date.now()}`;
+      const blob = dataURLtoBlob(previewFrame);
+      const fileName = `${fileId}.png`;
+
+      // 1. Upload image to Supabase Storage bucket 'frames'
+      const { data: storageData, error: storageError } = await supabase.storage
+        .from("frames")
+        .upload(fileName, blob, { contentType: "image/png" });
+
+      if (storageError) throw storageError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("frames")
+        .getPublicUrl(fileName);
+      const imageUrl = urlData.publicUrl;
+
+      // 2. Insert record into Supabase custom_frames table
+      const { data: dbData, error: dbError } = await supabase
+        .from("custom_frames")
+        .insert([
+          {
+            name: frameName.trim(),
+            image_url: imageUrl,
+            border_color: borderColor,
+            text_color: "#ffffff",
+          },
+        ])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      const newFrame: CustomFrame = {
+        id: dbData.id,
+        name: dbData.name,
+        imageData: dbData.image_url,
+        borderColor: dbData.border_color,
+        textColor: dbData.text_color || "#ffffff",
+      };
+
+      setCustomFrames([newFrame, ...customFrames]);
+      playSound("complete");
+      setPreviewFrame(null);
+      setFrameName("");
+      setShowUploadModal(false);
+    } catch (error) {
+      console.error("Error saving custom frame:", error);
+      alert(
+        "Failed to save frame to database. Make sure you have created the 'frames' storage bucket and 'custom_frames' table in Supabase.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteCustomFrame = async (frameId: string) => {
     if (!setCustomFrames) return;
     playSound("click");
-    setCustomFrames(customFrames.filter((f) => f.id !== frameId));
-    if (selectedFrame && "imageData" in selectedFrame && selectedFrame.id === frameId) {
-      setSelectedFrame(framesList[0]);
+
+    try {
+      // Find frame to get image URL for deletion
+      const frameToDelete = customFrames.find((f) => f.id === frameId);
+
+      if (frameToDelete && frameToDelete.imageData) {
+        const urlParts = frameToDelete.imageData.split("/");
+        const fileName = urlParts[urlParts.length - 1];
+
+        if (fileName) {
+          // Delete from storage
+          await supabase.storage.from("frames").remove([fileName]);
+        }
+      }
+
+      // Delete from table
+      const { error } = await supabase
+        .from("custom_frames")
+        .delete()
+        .eq("id", frameId);
+      if (error) throw error;
+
+      setCustomFrames(customFrames.filter((f) => f.id !== frameId));
+      if (
+        selectedFrame &&
+        "imageData" in selectedFrame &&
+        selectedFrame.id === frameId
+      ) {
+        setSelectedFrame(framesList[0]);
+      }
+    } catch (error) {
+      console.error("Error deleting custom frame:", error);
     }
   };
 
   // Helper to safely get frame properties (handles both FrameTemplate and CustomFrame)
-  const getFrameProp = (prop: "headerTheme" | "decoStyle", fallback: string) => {
+  const getFrameProp = (
+    prop: "headerTheme" | "decoStyle",
+    fallback: string,
+  ) => {
     if ("imageData" in selectedFrame) {
       return prop === "headerTheme" ? selectedFrame.name : "custom-frame";
     }
@@ -222,49 +314,6 @@ export function ChooseLayoutView({
             FRAME &amp; LAYOUT BUILDER
           </h2>
         </div>
-
-        {/* Categories of Frame Design Deco */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs font-mono text-gray-400 mr-2">
-            <Layers size={13} className="text-[#EA2D2D] animate-bounce" />
-            <span className="tracking-widest">DECO STYLE:</span>
-          </div>
-          <LayoutGroup id="deco-filters">
-            <div className="flex flex-wrap gap-1.5">
-              {frameCategories.map((cat) => {
-                const isActive = categoryFilter === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      playSound("click");
-                      setCategoryFilter(cat);
-                    }}
-                    className="px-3 py-1.5 text-xs font-mono transition-colors relative cursor-pointer"
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="activeDecoBackground"
-                        className="absolute inset-0 bg-[#EA2D2D] rounded-md shadow-[0_0_12px_rgba(234,45,45,0.4)]"
-                        transition={{
-                          type: "spring",
-                          stiffness: 380,
-                          damping: 30,
-                        }}
-                      />
-                    )}
-                    <span
-                      className={`relative z-10 transition-colors duration-200 ${isActive ? "text-white font-bold" : "text-gray-400 hover:text-white"}`}
-                    >
-                      {cat}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </LayoutGroup>
-        </div>
       </div>
 
       {/* Main Row layout view */}
@@ -273,10 +322,24 @@ export function ChooseLayoutView({
         <div className="lg:col-span-8 flex flex-col gap-6">
           {/* Section 1: Selecting Frame Border Design */}
           <div>
-            <h3 className="font-display font-bold text-xs text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Sparkles size={14} className="text-[#FF9A9A]" />
-              <span>1. SELECT STICKER BORDER DESIGN</span>
-            </h3>
+            <div className="flex items-center gap-4 mb-4">
+              <h3 className="font-display font-bold text-xs text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <Sparkles size={14} className="text-[#FF9A9A]" />
+                <span>1. UPLOAD & SELECT FRAME</span>
+              </h3>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                type="button"
+                onClick={() => {
+                  playSound("click");
+                  setShowUploadModal(true);
+                }}
+                className="w-8 h-8 rounded-full border border-dashed border-white/30 hover:border-[#EA2D2D] bg-white/5 hover:bg-[#EA2D2D]/10 flex items-center justify-center cursor-pointer transition-all"
+              >
+                <Plus size={16} className="text-[#EA2D2D]" />
+              </motion.button>
+            </div>
 
             <motion.div
               variants={containerVariants}
@@ -285,70 +348,6 @@ export function ChooseLayoutView({
               className="grid grid-cols-2 md:grid-cols-3 gap-3"
             >
               <AnimatePresence mode="popLayout">
-                {framesList
-                  .filter(
-                    (frame) =>
-                      categoryFilter === "All" ||
-                      frame.category === categoryFilter,
-                  )
-                  .map((frame) => {
-                    const isSelected = selectedFrame.id === frame.id;
-
-                    return (
-                      <motion.button
-                        layout
-                        variants={itemVariants}
-                        whileHover={{ scale: 1.04, y: -4 }}
-                        whileTap={{ scale: 0.96 }}
-                        key={frame.id}
-                        type="button"
-                        onClick={() => {
-                          playSound("click");
-                          setSelectedFrame(frame);
-                        }}
-                        className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between relative overflow-hidden h-28 group ${
-                          isSelected
-                            ? "bg-[#EA2D2D]/10"
-                            : "bg-[#111111]/70 hover:bg-[#151515] hover:border-white/20"
-                        }`}
-                        style={{
-                          borderColor: isSelected
-                            ? frame.borderColor
-                            : "rgba(255,255,255,0.05)",
-                          boxShadow: isSelected
-                            ? `0 0 22px ${frame.borderColor}55`
-                            : "none",
-                        }}
-                      >
-                        <div
-                          className="absolute -right-8 -top-8 w-20 h-20 rounded-full blur-2xl opacity-35 pointer-events-none"
-                          style={{ backgroundColor: frame.borderColor }}
-                        />
-
-                        <div className="flex items-center justify-between w-full relative z-10">
-                          <div
-                            className="w-5 h-5 rounded-md border-2 border-white/30 shadow-inner"
-                            style={{ backgroundColor: frame.borderColor }}
-                          />
-                          <span
-                            className={`font-pixel text-[6px] px-1.5 py-0.5 rounded uppercase tracking-wider ${getRarityStyles(frame.rarity)}`}
-                          >
-                            {frame.rarity}
-                          </span>
-                        </div>
-
-                        <div className="mt-auto relative z-10 w-full">
-                          <span className="font-display font-black text-xs text-white block truncate group-hover:text-[#FF9A9A] transition-colors duration-200">
-                            {frame.name}
-                          </span>
-                          <span className="text-[9px] text-gray-500 font-mono italic block tracking-wide mt-0.5">
-                            {frame.category} / {frame.layoutCount} pose
-                          </span>
-                        </div>
-                      </motion.button>
-                    );
-                  })}
-
                 {customFrames.map((frame) => {
                   const isSelected = selectedFrame.id === frame.id;
 
@@ -421,26 +420,6 @@ export function ChooseLayoutView({
                     </motion.button>
                   );
                 })}
-
-                <motion.button
-                  layout
-                  variants={itemVariants}
-                  whileHover={{ scale: 1.04, y: -4 }}
-                  whileTap={{ scale: 0.96 }}
-                  type="button"
-                  onClick={() => {
-                    playSound("click");
-                    setShowUploadModal(true);
-                  }}
-                  className="p-3.5 rounded-xl border-2 border-dashed border-white/20 hover:border-[#EA2D2D]/50 bg-[#111111]/30 hover:bg-[#EA2D2D]/5 flex flex-col justify-center items-center gap-2 relative overflow-hidden h-28 cursor-pointer transition-all group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[#EA2D2D]/20 group-hover:bg-[#EA2D2D]/30 flex items-center justify-center transition-all">
-                    <Plus size={20} className="text-[#EA2D2D]" />
-                  </div>
-                  <span className="text-[10px] font-pixel text-gray-400 group-hover:text-white transition-colors">
-                    UPLOAD FRAME
-                  </span>
-                </motion.button>
               </AnimatePresence>
             </motion.div>
           </div>
@@ -575,7 +554,11 @@ export function ChooseLayoutView({
                                   headerTheme={getFrameProp("headerTheme", "")}
                                   photos={[]}
                                   decoStyle={getFrameProp("decoStyle", "")}
-                                  customFrameImage={"imageData" in selectedFrame ? selectedFrame.imageData : undefined}
+                                  customFrameImage={
+                                    "imageData" in selectedFrame
+                                      ? selectedFrame.imageData
+                                      : undefined
+                                  }
                                 />
                               </div>
                             </div>
@@ -653,7 +636,11 @@ export function ChooseLayoutView({
                 headerTheme={getFrameProp("headerTheme", "")}
                 photos={[]}
                 decoStyle={getFrameProp("decoStyle", "")}
-                customFrameImage={"imageData" in selectedFrame ? selectedFrame.imageData : undefined}
+                customFrameImage={
+                  "imageData" in selectedFrame
+                    ? selectedFrame.imageData
+                    : undefined
+                }
               />
             </motion.div>
           </div>
@@ -773,7 +760,9 @@ export function ChooseLayoutView({
                 />
 
                 <div className="flex flex-col items-center gap-3">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDragging ? "bg-[#EA2D2D]/20 text-[#EA2D2D]" : "bg-white/5 text-gray-400"}`}>
+                  <div
+                    className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDragging ? "bg-[#EA2D2D]/20 text-[#EA2D2D]" : "bg-white/5 text-gray-400"}`}
+                  >
                     <Upload size={20} />
                   </div>
                   <div className="text-center">
@@ -822,15 +811,21 @@ export function ChooseLayoutView({
                 </button>
                 <button
                   onClick={handleSaveFrame}
-                  disabled={!previewFrame || !frameName.trim()}
+                  disabled={!previewFrame || !frameName.trim() || isUploading}
                   className={`flex-1 py-2.5 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                    previewFrame && frameName.trim()
+                    previewFrame && frameName.trim() && !isUploading
                       ? "bg-[#EA2D2D] hover:bg-[#C61D1D] text-white"
                       : "bg-white/5 text-gray-600 cursor-not-allowed"
                   }`}
                 >
-                  <Check size={14} />
-                  SAVE
+                  {isUploading ? (
+                    <span className="animate-pulse">UPLOADING...</span>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      SAVE
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

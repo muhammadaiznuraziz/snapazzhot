@@ -96,7 +96,7 @@ export function PhotoSessionPage({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="w-full max-w-[1400px] mx-auto flex flex-col gap-6"
+      className="w-full flex flex-col gap-6 px-2 md:px-4 select-none"
       id="view-photo-session"
     >
       {/* Small modal ketika akses kamera ditolak */}
@@ -156,14 +156,10 @@ export function PhotoSessionPage({
         )}
       </AnimatePresence>
 
-      
-
       {/* MAIN TWO-COLUMN CONTENT GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        
         {/* LEFT COLUMN: VIEWFINDER & CONTROL BUTTONS BELOW IT */}
         <div className="lg:col-span-8 flex flex-col gap-5">
-          
           {/* VIEWFINDER SCREEN */}
           <div
             className="w-full aspect-[4/3] bg-black border-4 border-white rounded-3xl relative overflow-hidden shadow-[0_15px_45px_rgba(0,0,0,0.6)]"
@@ -254,7 +250,7 @@ export function PhotoSessionPage({
                   type="button"
                   className={`px-3 py-1 rounded-full text-[8px] font-pixel uppercase tracking-widest transition-colors flex items-center gap-0.5 ${
                     isFlashActive
-                      ? "bg-yellow-400 text-black font-bold"
+                      ? "bg-grey-400 text-black font-bold"
                       : "text-white/60 hover:text-white"
                   }`}
                 >
@@ -270,7 +266,7 @@ export function PhotoSessionPage({
 
             {/* BOTTOM HUD SPECIFICATIONS IN VIEWFINDER */}
             <div className="absolute bottom-4 inset-x-4 flex justify-between pointer-events-none z-20">
-              <span className="font-mono text-[9px] bg-black/60 text-yellow-400 px-2 py-0.5 rounded border border-white/10 uppercase tracking-widest">
+              <span className="font-mono text-[9px] bg-black/60 text-grey-400 px-2 py-0.5 rounded border border-white/10 uppercase tracking-widest">
                 ISO 800
               </span>
               <span className="font-mono text-[9px] bg-black/60 text-green-400 px-2 py-0.5 rounded border border-white/10 uppercase tracking-widest">
@@ -328,7 +324,7 @@ export function PhotoSessionPage({
               type="button"
               onClick={triggerSessionPhotos}
               disabled={isShooting}
-              className={`col-span-3 py-5 bg-[#ffbe3b] hover:bg-[#ffcd60] text-black border-4 border-black rounded-2xl flex items-center justify-center gap-3 font-pixel text-sm uppercase tracking-widest shadow-[5px_5px_0px_#000000] cursor-pointer transition-transform ${
+              className={`col-span-3 py-5 bg-[#b1b1b1] hover:bg-[#ffb9b9] text-black border-4 border-black rounded-2xl flex items-center justify-center gap-3 font-pixel text-sm uppercase tracking-widest shadow-[5px_5px_0px_#000000] cursor-pointer transition-transform ${
                 isShooting
                   ? "opacity-60 cursor-not-allowed"
                   : "active:scale-95 active:translate-x-[2px] active:translate-y-[2px]"
@@ -338,7 +334,6 @@ export function PhotoSessionPage({
               <span>{isShooting ? "RECORDING..." : "CAPTURE"}</span>
             </button>
           </div>
-
         </div>
 
         {/* RIGHT COLUMN: INVENTORY CARD (Live Strip Preview Blueprints) */}
@@ -348,39 +343,51 @@ export function PhotoSessionPage({
           onDrop={handleDrop}
         >
           {/* INDIE BLUE GAME STYLE PANEL CONTAINER */}
-          <div className="bg-[#0b1c35] border-4 border-black p-5 rounded-2xl flex flex-col gap-5 shadow-[8px_8px_0px_#000000] h-full justify-between">
+          <div className="bg-[#414141] border-4 border-black p-5 rounded-2xl flex flex-col gap-5 shadow-[8px_8px_0px_#000000] h-full justify-between">
             <div>
               {/* Inventory Header */}
               <div className="flex items-center justify-between pb-4 border-b-2 border-black/30">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-[#ffbe3b] rotate-45 border-2 border-black shrink-0" />
+                  <div className="w-5 h-5 bg-[#4d4d4d] rotate-45 border-2 border-black shrink-0" />
                   <span className="font-pixel text-[13px] text-white tracking-widest font-black uppercase">
                     INVENTORY
                   </span>
                 </div>
-                <span className="font-pixel text-[10px] text-white bg-green-500 border-2 border-black px-2 py-0.5 rounded-md shadow-[2px_2px_0px_#000000]">
+                <span className="font-pixel text-[10px] text-white bg-grey-500 border-2 border-black px-2 py-0.5 rounded-md shadow-[2px_2px_0px_#000000]">
                   {capturedPhotos.length}/{photoStripLayout}
                 </span>
               </div>
 
               {/* Realtime Layout Shape Preview Mockup */}
               <div className="bg-black/40 p-4 rounded-xl border border-white/5 flex flex-col items-center justify-center relative overflow-hidden group mt-4">
-                <span className="font-pixel text-[8px] text-[#ffbe3b] mb-3.5 uppercase block self-start tracking-wider flex items-center gap-1.5">
-                  <Sparkles size={10} className="animate-spin text-[#ffbe3b]" />
+                <span className="font-pixel text-[8px] text-[#ffffff] mb-3.5 uppercase block self-start tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={10} className="animate-spin text-[#ffffff]" />
                   LIVE PRINT BLUEPRINT
                 </span>
-                
+
                 <div className="w-full max-w-[150px] shadow-[0_10px_30px_rgba(0,0,0,0.5)] transition-transform duration-500 group-hover:rotate-1">
                   <LayoutRenderer
                     layoutId={selectedLayoutId}
                     borderColor={selectedFrame.borderColor}
                     textColor={selectedFrame.textColor}
-                    headerTheme={"imageData" in selectedFrame ? selectedFrame.name : (selectedFrame as FrameTemplate).headerTheme}
+                    headerTheme={
+                      "imageData" in selectedFrame
+                        ? selectedFrame.name
+                        : (selectedFrame as FrameTemplate).headerTheme
+                    }
                     photos={capturedPhotos}
                     isRecordingMode={isShooting}
                     activeSlotIndex={currentIndex}
-                    decoStyle={"imageData" in selectedFrame ? "custom-frame" : (selectedFrame as FrameTemplate).decoStyle}
-                    customFrameImage={"imageData" in selectedFrame ? selectedFrame.imageData : undefined}
+                    decoStyle={
+                      "imageData" in selectedFrame
+                        ? "custom-frame"
+                        : (selectedFrame as FrameTemplate).decoStyle
+                    }
+                    customFrameImage={
+                      "imageData" in selectedFrame
+                        ? selectedFrame.imageData
+                        : undefined
+                    }
                   />
                 </div>
               </div>
@@ -406,7 +413,6 @@ export function PhotoSessionPage({
               )}
             </div>
           </div>
-
         </div>
       </div>
     </motion.div>
