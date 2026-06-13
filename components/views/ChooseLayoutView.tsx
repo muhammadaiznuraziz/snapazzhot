@@ -83,6 +83,14 @@ export function ChooseLayoutView({
       title: "4 POSES QUAD",
       layouts: LAYOUT_PRESETS.filter((l) => l.poseCount === 4),
     },
+    {
+      title: "5 POSES",
+      layouts: LAYOUT_PRESETS.filter((l) => l.poseCount === 5),
+    },
+    {
+      title: "6 POSES",
+      layouts: LAYOUT_PRESETS.filter((l) => l.poseCount === 6),
+    },
   ];
   const frameCategories = [
     "All",

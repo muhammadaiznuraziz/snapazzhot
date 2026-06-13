@@ -1,7 +1,13 @@
 export interface FrameTemplate {
   id: string;
   name: string;
-  category: "Football" | "Retro" | "Aesthetic" | "K-Pop" | "Anime" | "Graduation";
+  category:
+    | "Football"
+    | "Retro"
+    | "Aesthetic"
+    | "K-Pop"
+    | "Anime"
+    | "Graduation";
   rarity: "Common" | "Rare" | "Epic" | "Legendary";
   layoutCount: number; // default number of photos
   borderColor: string;
@@ -27,17 +33,97 @@ export interface LayoutPreset {
 }
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
-  { id: "LAYOUT_A", name: "LAYOUT A", size: "2x6", poseCount: 3, description: "Size 2x6, 3 Pose" },
-  { id: "LAYOUT_B", name: "LAYOUT B", size: "2x6", poseCount: 4, description: "Size 2x6, 4 Pose" },
-  { id: "LAYOUT_C", name: "LAYOUT C", size: "4x6", poseCount: 4, description: "Size 4x6, 4 Pose" },
-  { id: "LAYOUT_D", name: "LAYOUT D", size: "4x6", poseCount: 1, description: "Size 4x6, 1 Pose" },
-  { id: "LAYOUT_E", name: "LAYOUT E", size: "4x6", poseCount: 2, description: "Size 4x6, 2 Pose" },
-  { id: "LAYOUT_F", name: "LAYOUT F", size: "4x6", poseCount: 1, description: "Size 4x6, 1 Pose" },
-  { id: "LAYOUT_G", name: "LAYOUT G", size: "4x6", poseCount: 2, description: "Size 4x6, 2 Pose" },
-  { id: "LAYOUT_H", name: "LAYOUT H", size: "4x6", poseCount: 4, description: "Size 4x6, 4 Pose" },
-  { id: "LAYOUT_I", name: "LAYOUT I", size: "4x6", poseCount: 3, description: "Size 4x6, 3 Pose" },
-  { id: "LAYOUT_J", name: "LAYOUT J", size: "4x6", poseCount: 3, description: "Size 4x6, 3 Pose" },
-  { id: "LAYOUT_K", name: "LAYOUT K", size: "4x6", poseCount: 2, description: "Size 4x6, 2 Pose" },
+  {
+    id: "LAYOUT_A",
+    name: "LAYOUT A",
+    size: "2x6",
+    poseCount: 3,
+    description: "Size 2x6, 3 Pose",
+  },
+  {
+    id: "LAYOUT_B",
+    name: "LAYOUT B",
+    size: "2x6",
+    poseCount: 4,
+    description: "Size 2x6, 4 Pose",
+  },
+  {
+    id: "LAYOUT_C",
+    name: "LAYOUT C",
+    size: "4x6",
+    poseCount: 4,
+    description: "Size 4x6, 4 Pose",
+  },
+  {
+    id: "LAYOUT_D",
+    name: "LAYOUT D",
+    size: "4x6",
+    poseCount: 1,
+    description: "Size 4x6, 1 Pose",
+  },
+  {
+    id: "LAYOUT_E",
+    name: "LAYOUT E",
+    size: "4x6",
+    poseCount: 2,
+    description: "Size 4x6, 2 Pose",
+  },
+  {
+    id: "LAYOUT_F",
+    name: "LAYOUT F",
+    size: "4x6",
+    poseCount: 1,
+    description: "Size 4x6, 1 Pose",
+  },
+  {
+    id: "LAYOUT_G",
+    name: "LAYOUT G",
+    size: "4x6",
+    poseCount: 2,
+    description: "Size 4x6, 2 Pose",
+  },
+  {
+    id: "LAYOUT_H",
+    name: "LAYOUT H",
+    size: "4x6",
+    poseCount: 4,
+    description: "Size 4x6, 4 Pose",
+  },
+  {
+    id: "LAYOUT_I",
+    name: "LAYOUT I",
+    size: "4x6",
+    poseCount: 3,
+    description: "Size 4x6, 3 Pose",
+  },
+  {
+    id: "LAYOUT_J",
+    name: "LAYOUT J",
+    size: "4x6",
+    poseCount: 3,
+    description: "Size 4x6, 3 Pose",
+  },
+  {
+    id: "LAYOUT_K",
+    name: "LAYOUT K",
+    size: "4x6",
+    poseCount: 2,
+    description: "Size 4x6, 2 Pose",
+  },
+  {
+    id: "LAYOUT_L",
+    name: "LAYOUT L",
+    poseCount: 5,
+    size: "4x6",
+    description: "Size 4x6, 5 Pose",
+  },
+  {
+    id: "LAYOUT_M",
+    name: "LAYOUT M",
+    poseCount: 6,
+    size: "4x6",
+    description: "Size 4x6, 6 Pose",
+  },
 ];
 
 export interface User {

@@ -194,6 +194,45 @@ export const LAYOUT_METADATA: Record<string, LayoutMetadata> = {
       },
     ],
   },
+  LAYOUT_L: {
+    canvasWidth: 900,
+    canvasHeight: 600,
+
+    slots: [
+      { x: 50, y: 50, w: 250, h: 250 },
+      { x: 325, y: 50, w: 250, h: 250 },
+      { x: 600, y: 50, w: 250, h: 250 },
+
+      { x: 190, y: 320, w: 250, h: 250 },
+      { x: 460, y: 320, w: 250, h: 250 },
+    ],
+
+    emptyBlocks: [],
+  },
+  LAYOUT_M: {
+    canvasWidth: 900,
+    canvasHeight: 1400,
+
+    slots: [
+      { x: 50, y: 50, w: 380, h: 250 }, // 1
+      { x: 50, y: 320, w: 380, h: 250 }, // 2
+      { x: 50, y: 590, w: 380, h: 250 }, // 3
+
+      { x: 470, y: 50, w: 380, h: 250 }, // 4
+      { x: 470, y: 320, w: 380, h: 250 }, // 5
+      { x: 470, y: 590, w: 380, h: 250 }, // 6
+    ],
+
+    emptyBlocks: [
+      {
+        label: "SNAPAZZHOT",
+        x: 50,
+        y: 900,
+        w: 800,
+        h: 400,
+      },
+    ],
+  },
 };
 
 interface RenderedSlotProps {
@@ -617,6 +656,47 @@ export function LayoutRenderer({
         </FrameSurface>
       );
 
+    case "LAYOUT_L":
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[3/2]">
+          <div className="flex flex-col gap-2 h-full">
+            {/* Row 1 */}
+            <div className="grid grid-cols-3 gap-2">
+              {renderSlot(0, "", { aspectRatio: "1/1" })}
+              {renderSlot(1, "", { aspectRatio: "1/1" })}
+              {renderSlot(2, "", { aspectRatio: "1/1" })}
+            </div>
+
+            {/* Row 2 */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                {renderSlot(3, "", { aspectRatio: "2/1" })}
+              </div>
+
+              {renderSlot(4, "", { aspectRatio: "1/1" })}
+            </div>
+          </div>
+        </FrameSurface>
+      );
+
+    case "LAYOUT_M":
+      return (
+        <FrameSurface className="w-full max-w-[340px] p-4 rounded-xl aspect-[2/3]">
+          <div className="flex flex-col gap-2 h-full">
+            {/* Grid 2x3 */}
+            <div className="grid grid-cols-2 gap-2">
+              {renderSlot(0, "", { aspectRatio: "1/1" })}
+              {renderSlot(3, "", { aspectRatio: "1/1" })}
+
+              {renderSlot(1, "", { aspectRatio: "1/1" })}
+              {renderSlot(4, "", { aspectRatio: "1/1" })}
+
+              {renderSlot(2, "", { aspectRatio: "1/1" })}
+              {renderSlot(5, "", { aspectRatio: "1/1" })}
+            </div>
+          </div>
+        </FrameSurface>
+      );
     default:
       return (
         <div className="p-4 text-center text-xs text-red-500">

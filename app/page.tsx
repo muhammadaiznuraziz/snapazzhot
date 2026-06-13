@@ -902,77 +902,7 @@ export default function SnapazPhotobooth() {
       });
     }
 
-    // Apply background textures or decoration styles
-    const decoStyle = getFrameProp("decoStyle", "");
-    if (decoStyle.includes("neon") || decoStyle.includes("vhs") || decoStyle.includes("blue") || decoStyle.includes("practice") || decoStyle.includes("lightstick") || decoStyle.includes("rain")) {
-      ctx.strokeStyle = "rgba(255, 107, 107, 0.15)";
-      ctx.lineWidth = 1;
-      for (let x = 0; x < canvasWidth; x += 25) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvasHeight);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvasHeight; y += 25) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvasWidth, y);
-        ctx.stroke();
-      }
-    } else if (decoStyle.includes("sakura") || decoStyle.includes("soft") || decoStyle.includes("candy") || decoStyle.includes("festival") || decoStyle.includes("magical") || decoStyle.includes("pink")) {
-      ctx.fillStyle = "rgba(255, 182, 193, 0.25)";
-      for (let i = 0; i < 25; i++) {
-        const p1 = Math.sin(i + 1) * 12345;
-        const seed1 = p1 - Math.floor(p1);
-        const p2 = Math.cos(i + 2) * 54321;
-        const seed2 = p2 - Math.floor(p2);
-        const p3 = Math.sin(i + 3) * 67890;
-        const seed3 = p3 - Math.floor(p3);
-
-        ctx.beginPath();
-        ctx.arc(
-          seed1 * canvasWidth,
-          seed2 * canvasHeight,
-          10 + seed3 * 15,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-    } else if (decoStyle.includes("football") || decoStyle.includes("stadium") || decoStyle.includes("pitch") || decoStyle.includes("cup") || decoStyle.includes("ultras")) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-      for (let y = 0; y < canvasHeight; y += 80) {
-        ctx.fillRect(0, y, canvasWidth, 40);
-      }
-    } else if (decoStyle.includes("manga") || decoStyle.includes("mecha") || decoStyle.includes("villain")) {
-      ctx.fillStyle = "rgba(255,255,255,0.12)";
-      for (let y = 0; y < canvasHeight; y += 14) {
-        for (let x = 0; x < canvasWidth; x += 14) {
-          ctx.beginPath();
-          ctx.arc(x, y, 1.6, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    } else if (decoStyle.includes("grad") || decoStyle.includes("campus") || decoStyle.includes("diploma") || decoStyle.includes("valedictorian") || decoStyle.includes("confetti")) {
-      const confettiColors = ["#fbbf24", "#ffffff", "#f87171", "#60a5fa"];
-      for (let i = 0; i < 40; i++) {
-        ctx.fillStyle = confettiColors[i % confettiColors.length];
-        ctx.save();
-        ctx.translate((i * 47) % canvasWidth, (i * 83) % canvasHeight);
-        ctx.rotate((i % 6) * 0.35);
-        ctx.fillRect(-4, -2, 8, 4);
-        ctx.restore();
-      }
-    } else if (decoStyle.includes("idol") || decoStyle.includes("backstage") || decoStyle.includes("comeback")) {
-      ctx.strokeStyle = "rgba(244,114,182,0.24)";
-      ctx.lineWidth = 3;
-      for (let x = -canvasHeight; x < canvasWidth; x += 55) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x + canvasHeight, canvasHeight);
-        ctx.stroke();
-      }
-    }
+    
 
     // Top Header Titles
     ctx.fillStyle = selectedFrame.textColor;
@@ -1094,28 +1024,9 @@ export default function SnapazPhotobooth() {
       drawCanvasPhotoSlot(loadedImgs[idx], slot.x, slot.y, slot.w, slot.h, idx);
     });
 
-    // Draw all empty artwork blocks
-    layoutConfig.emptyBlocks.forEach((block) => {
-      drawEmptyBlackBlock(block.label, block.x, block.y, block.w, block.h);
-    });
+    
 
-    const themeStickers = (() => {
-      if (decoStyle.includes("football") || decoStyle.includes("stadium") || decoStyle.includes("pitch") || decoStyle.includes("cup") || decoStyle.includes("ultras")) {
-        return ["GOAL", "MATCH", "90+", "WIN"];
-      }
-      if (decoStyle.includes("idol") || decoStyle.includes("backstage") || decoStyle.includes("lightstick") || decoStyle.includes("comeback") || decoStyle.includes("practice")) {
-        return ["IDOL", "LIVE", "FAN", "STAR"];
-      }
-      if (decoStyle.includes("manga")) return ["BANG", "POW", "ACTION", "SPEED"];
-      if (decoStyle.includes("mecha")) return ["UNIT", "CORE", "SYNC", "01"];
-      if (decoStyle.includes("villain")) return ["DARK", "EDGE", "NOIR", "CUT"];
-      if (decoStyle.includes("grad") || decoStyle.includes("campus") || decoStyle.includes("diploma") || decoStyle.includes("valedictorian") || decoStyle.includes("confetti")) {
-        return ["CLASS", "2026", "HONOR", "GOLD"];
-      }
-      if (decoStyle.includes("vhs") || decoStyle.includes("chrome")) return ["VHS", "REC", "PLAY", "RETRO"];
-      return ["DREAM", "SOFT", "SNAP", "LOVE"];
-    })();
-
+    
     const drawThemeSticker = (
       text: string,
       x: number,
@@ -1143,58 +1054,10 @@ export default function SnapazPhotobooth() {
       ctx.restore();
     };
 
-    drawThemeSticker(themeStickers[0], 72, 92, -0.22, selectedFrame.textColor || "#ffffff", selectedFrame.borderColor || "#111111");
-    drawThemeSticker(themeStickers[1], canvasWidth - 76, 92, 0.18, "#ffffff", selectedFrame.borderColor || "#111111");
-    drawThemeSticker(themeStickers[2], 78, canvasHeight - 150, 0.16, "#fbbf24", "#111827");
-    drawThemeSticker(themeStickers[3], canvasWidth - 78, canvasHeight - 150, -0.18, selectedFrame.borderColor || "#111111", selectedFrame.textColor || "#ffffff");
 
-    // Bottom decorative/attribution signature text with generated IDs
-    const footerY = canvasHeight - 95;
+    
 
-    ctx.fillStyle = selectedFrame.textColor || "#ffffff";
-    ctx.font = "12px monospace";
-    ctx.textAlign = "center";
-    ctx.fillText(`SESSION ID: ${generatedSessionID}`, canvasWidth / 2, footerY);
-
-    ctx.fillStyle = "#FDB022";
-    ctx.font = "bold 13px monospace";
-    ctx.fillText(
-      `★ ${geminiObj.commentary.toUpperCase()} ★`,
-      canvasWidth / 2,
-      footerY + 25,
-    );
-
-    // Draw interactive cute metadata stickers
-    geminiObj.stickers.forEach((st, idx) => {
-      ctx.save();
-      const stWidth = 100;
-      const stHeight = 28;
-      const totalWidth = geminiObj.stickers.length * (stWidth + 15) - 15;
-      const startX = (canvasWidth - totalWidth) / 2;
-      const stX = startX + idx * (stWidth + 15);
-      const stY = footerY + 45;
-
-      ctx.fillStyle = st.color;
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 2.5;
-
-      ctx.beginPath();
-      if (ctx.roundRect) {
-        ctx.roundRect(stX, stY, stWidth, stHeight, 6);
-      } else {
-        ctx.rect(stX, stY, stWidth, stHeight);
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = "#000000";
-      ctx.font = "bold 9px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(st.text, stX + stWidth / 2, stY + stHeight / 2);
-      ctx.restore();
-    });
-
+    
     const compositedBase64 = canvas.toDataURL("image/png");
     setFinalCompositedImage(compositedBase64);
     setIsLoadingGemini(false);

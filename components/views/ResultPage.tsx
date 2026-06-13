@@ -18,12 +18,44 @@ import {
   PackageCheck,
   AlertTriangle,
   Sparkles,
+  Link2,
+  ExternalLink,
 } from "lucide-react";
 import {
   CustomFrame,
   FrameTemplate,
   GeminiResult,
 } from "../../types/photobooth";
+import { supabase } from "../../utils/supabase";
+import { QRCodeCanvas } from "qrcode.react";
+
+// Storage abstraction layer
+async function uploadZipAndGetUrl(
+  zipBlob: Blob,
+  sessionID: string,
+): Promise<string> {
+  const fileId = sessionID || `session_${Date.now()}`;
+  const fileName = `downloads/snapazzhot-${fileId}.zip`;
+
+  // Upload to public storage bucket 'frames'
+  const { data, error } = await supabase.storage
+    .from("frames")
+    .upload(fileName, zipBlob, {
+      contentType: "application/zip",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  // Get public URL
+  const { data: urlData } = supabase.storage
+    .from("frames")
+    .getPublicUrl(fileName);
+
+  return urlData.publicUrl;
+}
 
 interface ResultPageProps {
   resultTab: "PHOTO STRIP" | "GIF" | "VIDEO";
@@ -132,6 +164,11 @@ export function ResultPage({
   const [isGeneratingZip, setIsGeneratingZip] = useState(false);
   const [zipProgress, setZipProgress] = useState<string>("");
   const [sessionVideoUrl, setSessionVideoUrl] = useState<string | null>(null);
+
+  // States untuk QR Download Package
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [isUploadingZip, setIsUploadingZip] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
 
   // Cache Blobs yang sudah jadi di latar belakang untuk menghindari render ulang saat diunduh
   const [cachedStripBlob, setCachedStripBlob] = useState<Blob | null>(null);
@@ -572,6 +609,22 @@ export function ResultPage({
         (meta) => setZipProgress(`Mengemas... ${Math.round(meta.percent)}%`),
       );
 
+      // ── Cloud Storage Upload & QR Generation ──
+      setIsUploadingZip(true);
+      setUploadProgress("Uploading ZIP...");
+      try {
+        const publicUrl = await uploadZipAndGetUrl(zipBlob, sessionID);
+        setUploadProgress("Generating QR...");
+        setDownloadUrl(publicUrl);
+        setUploadProgress("Preparing Download...");
+      } catch (uploadErr) {
+        console.error("Gagal mengunggah ZIP ke cloud storage:", uploadErr);
+        triggerToast("Failed to generate QR Download. Please try again.");
+      } finally {
+        setIsUploadingZip(false);
+        setUploadProgress("");
+      }
+
       const url = URL.createObjectURL(zipBlob);
       registerObjectUrl(url);
 
@@ -710,11 +763,7 @@ export function ResultPage({
                       selectedFilter={selectedFilter}
                       filterIntensity={filterIntensity}
                       getFilterStyle={getFilterStyle}
-                      decoStyle={
-                        "imageData" in selectedFrame
-                          ? "custom-frame"
-                          : (selectedFrame as FrameTemplate).decoStyle
-                      }
+                      decoStyle="none"
                       customFrameImage={
                         "imageData" in selectedFrame
                           ? selectedFrame.imageData
@@ -1038,6 +1087,79 @@ export function ResultPage({
                 </span>
               </div>
             ))}
+          </div>
+
+          {/* ── DOWNLOAD PACKAGE VIA QR Section ── */}
+          <div className="bg-[#111111] border-2 border-[#EA2D2D] rounded-2xl flex flex-col overflow-hidden shadow-[0_0_20px_rgba(234,45,45,0.15)] relative">
+            <div className="border-b border-[#EA2D2D]/30 bg-[#EA2D2D]/10 px-4 py-3 text-center">
+              <span className="font-pixel text-[9px] text-[#FF9A9A] tracking-widest uppercase block">
+                DOWNLOAD PACKAGE VIA QR
+              </span>
+            </div>
+
+            <div className="p-6 flex flex-col items-center justify-center gap-4 text-center">
+              {isUploadingZip ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-3">
+                  <Loader2 className="animate-spin text-[#EA2D2D]" size={32} />
+                  <div className="font-pixel text-[8px] text-[#FF9A9A] tracking-wider animate-pulse uppercase">
+                    {uploadProgress || "Uploading..."}
+                  </div>
+                </div>
+              ) : downloadUrl ? (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="bg-white p-2.5 rounded-xl border-4 border-[#EA2D2D]/50 shadow-[0_0_15px_rgba(234,45,45,0.2)]">
+                    <QRCodeCanvas
+                      value={downloadUrl}
+                      size={220}
+                      includeMargin
+                    />
+                  </div>
+                  <span className="font-pixel text-[8px] text-gray-400 tracking-wider leading-relaxed mt-2 uppercase block">
+                    Scan dengan HP untuk
+                    <br />
+                    mengunduh semua file
+                  </span>
+                  <span className="font-pixel text-[7px] text-amber-500 tracking-widest block uppercase mt-1">
+                    Download tersedia selama 24 jam.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
+                  <Archive className="text-gray-600 animate-pulse" size={32} />
+                  <span className="font-pixel text-[8px] text-gray-500 tracking-wider uppercase">
+                    Click "DOWNLOAD ALL AS ZIP" to generate QR code
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {downloadUrl && !isUploadingZip && (
+              <div className="grid grid-cols-2 border-t border-[#EA2D2D]/30 divide-x divide-[#EA2D2D]/30 font-pixel text-[9px] uppercase tracking-widest bg-black/40">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(downloadUrl);
+                    playSound("click");
+                    triggerToast("LINK COPIED!");
+                  }}
+                  className="py-3.5 text-center text-gray-300 hover:text-white hover:bg-[#EA2D2D]/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Link2 size={12} />
+                  COPY LINK
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSound("click");
+                    window.open(downloadUrl, "_blank");
+                  }}
+                  className="py-3.5 text-center text-gray-300 hover:text-white hover:bg-[#EA2D2D]/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ExternalLink size={12} />
+                  OPEN LINK
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── SECONDARY: Save PNG only ── */}
